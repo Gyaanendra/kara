@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="96" fill="#0F0F1A"/>
+  <g transform="translate(110, 96)">
+    <!-- Vertical stem -->
+    <rect x="0" y="0" width="52" height="320" rx="8" fill="#6366F1"/>
+
+    <!-- Upper diagonal -->
+    <polygon points="52,160 268,0 312,0 312,52 86,186" fill="#6366F1"/>
+
+    <!-- Lower diagonal -->
+    <polygon points="52,160 86,134 312,320 312,268 86,108" fill="#818CF8"/>
+
+    <!-- Junction node -->
+    <circle cx="68" cy="160" r="14" fill="#A5B4FC"/>
+    <circle cx="68" cy="160" r="7" fill="#E0E7FF"/>
+
+    <!-- Upper node -->
+    <circle cx="268" cy="14" r="9" fill="#A5B4FC"/>
+    <circle cx="268" cy="14" r="4.5" fill="#E0E7FF"/>
+
+    <!-- Lower node -->
+    <circle cx="290" cy="306" r="9" fill="#A5B4FC"/>
+    <circle cx="290" cy="306" r="4.5" fill="#E0E7FF"/>
+
+    <!-- Neural lines -->
+    <line x1="82" y1="160" x2="259" y2="14" stroke="#A5B4FC" stroke-width="1.5" opacity="0.35"/>
+    <line x1="82" y1="160" x2="281" y2="306" stroke="#A5B4FC" stroke-width="1.5" opacity="0.35"/>
+  </g>
+</svg>
