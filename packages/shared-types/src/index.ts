@@ -1,50 +1,10 @@
 import { z } from "zod";
 
-// Meeting Lifecycle States
-export enum MeetingStatus {
-  SCHEDULED = "SCHEDULED",
-  BOT_JOINING = "BOT_JOINING",
-  RECORDING = "RECORDING",
-  PROCESSING = "PROCESSING",
-  COMPLETED = "COMPLETED",
-  FAILED = "FAILED",
-  CANCELLED = "CANCELLED"
-}
+import { TaskPriority, TaskStatus } from "./enums.js";
 
-// User RBAC Roles
-export enum UserRole {
-  MEMBER = "MEMBER",
-  ADMIN = "ADMIN",
-  SUPERADMIN = "SUPERADMIN"
-}
-
-// Twenty CRM Custom Object Field Types
-export enum CustomFieldType {
-  TEXT = "TEXT",
-  NUMBER = "NUMBER",
-  SELECT = "SELECT",
-  MULTI_SELECT = "MULTI_SELECT",
-  DATE = "DATE",
-  RELATION = "RELATION",
-  BOOLEAN = "BOOLEAN"
-}
-
-// Kanban Task Statuses
-export enum TaskStatus {
-  BACKLOG = "BACKLOG",
-  TODO = "TODO",
-  IN_PROGRESS = "IN_PROGRESS",
-  IN_REVIEW = "IN_REVIEW",
-  DONE = "DONE"
-}
-
-// Kanban Task Priorities
-export enum TaskPriority {
-  LOW = "LOW",
-  MEDIUM = "MEDIUM",
-  HIGH = "HIGH",
-  URGENT = "URGENT"
-}
+// Re-export every domain enum. Consumers keep importing from `@kara/shared-types`
+// exactly as before; the enum definitions simply live in `./enums.ts` now.
+export * from "./enums.js";
 
 // Non-hallucinatory past meeting query schema
 export const PastMeetingSearchSchema = z.object({
@@ -68,4 +28,3 @@ export const CreateTaskSchema = z.object({
 });
 
 export type CreateTaskInput = z.infer<typeof CreateTaskSchema>;
-

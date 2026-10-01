@@ -10,12 +10,6 @@
     "clean": "turbo clean"
   },
   "packageManager": "pnpm@12.6.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "msgpackr-extract",
-      "@nestjs/core"
-    ]
-  },
   "devDependencies": {
     "@types/node": "^26.6.2",
     "turbo": "^2.11.3",

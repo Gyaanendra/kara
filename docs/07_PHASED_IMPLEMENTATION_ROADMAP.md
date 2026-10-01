@@ -18,49 +18,61 @@ Each phase produces a concrete, testable deliverable before moving to the next.
 
 ---
 
-## Phase 2: Full-Stack Schema Design & Data Architecture (DESIGN ONLY -- NO CODE)
+## Phase 2: Full-Stack Schema Design & Data Architecture (2A COMPLETE, 2B-2D DESIGN ONLY)
 
 > **Goal**: Produce a complete, reviewed blueprint of every table, relation, API endpoint,
 > and frontend route BEFORE writing any implementation code. This prevents mid-build
 > rewrites and ensures the backend, frontend, and AI pipeline all agree on the same data contracts.
+>
+> **Status note**: the 2A blueprint was implemented directly as executable Drizzle schema
+> code rather than left as a paper design, because Drizzle's table builders *are* the
+> schema definition — there is no separate artifact to keep in sync. The full reference
+> for all 24 tables, the ERD, the query cookbook, and the index/migration strategy now
+> lives in **[08. Database Schema Reference & Query Cookbook](./08_DATABASE_SCHEMA_REFERENCE_AND_QUERIES.md)**.
+> Sections 2B, 2C, and 2D remain design-only and are still open.
 
-### 2A. Database Schema Design
+### 2A. Database Schema Design (`packages/db`) -- COMPLETE
 
-- [ ] **Entity-Relationship Diagram (ERD)**: Full Mermaid ER diagram covering all tables and their relations.
-- [ ] **Users & Auth Domain**:
-  - `users`, `organizations`, `org_memberships` tables.
-  - RBAC roles (`MEMBER`, `ADMIN`, `SUPERADMIN`) and permission matrix.
-  - Auth strategy decision (NextAuth.js / Lucia / custom JWT).
-- [ ] **Meeting Intelligence Domain**:
-  - `meetings` -- scheduled/active/completed meeting lifecycle.
-  - `recordings` -- S3 object references, duration, file size.
-  - `transcripts` -- full transcript document linked to a recording.
-  - `utterances` -- individual speaker turns with timestamps and speaker IDs.
-  - `meeting_participants` -- join table linking users to meetings with role (host/attendee/bot).
-- [ ] **MOM (Minutes of Meeting) Domain**:
-  - `moms` -- generated summary document linked to a meeting.
-  - `mom_decisions` -- extracted key decisions with context quotes.
-  - `mom_action_items` -- extracted action items with assignee, deadline, source utterance reference.
-- [ ] **Twenty CRM Custom Data Engine**:
+> Implementation: `packages/db/src/schema/` (6 modules, 24 tables) and
+> `packages/shared-types/src/enums.ts` (all domain enums).
+> Reference: [doc 08](./08_DATABASE_SCHEMA_REFERENCE_AND_QUERIES.md).
+
+- [x] **Entity-Relationship Diagram (ERD)**: Full Mermaid ER diagram covering all tables and their relations. -> doc 08 §3.
+- [x] **Users & Auth Domain**:
+  - `users`, `organizations`, `org_memberships` tables. -> `schema/auth.ts`.
+  - RBAC roles (`MEMBER`, `ADMIN`, `SUPERADMIN`) as the `UserRole` enum; per-org authority on `org_memberships.role`.
+  - [ ] Permission matrix -- still open.
+  - [ ] Auth strategy decision (NextAuth.js / Lucia / custom JWT) -- still open. `.env.example` currently carries `JWT_SECRET` / `JWT_EXPIRATION`, suggesting custom JWT.
+- [x] **Meeting Intelligence Domain** (`schema/meetings.ts`):
+  - `meetings` -- scheduled/active/completed meeting lifecycle, plus bot lifecycle columns and `meeting_type` (Laya auto-tagger output).
+  - `recordings` -- S3 object references, duration, file size, checksum for webhook idempotency.
+  - `transcripts` -- full transcript document linked to a recording, with retained `raw_payload`.
+  - `utterances` -- individual speaker turns with `start_ms`/`end_ms`, speaker IDs, `sequence`, and Laya `type` + content-guard flags.
+  - `meeting_participants` -- join table linking users to meetings with role (host/attendee/bot); `user_id` nullable for external guests.
+- [x] **MOM (Minutes of Meeting) Domain** (`schema/mom.ts`):
+  - `moms` -- generated summary document linked to a meeting (unique per meeting, for idempotent retries).
+  - `mom_decisions` -- extracted key decisions with `context_quote` provenance.
+  - `mom_action_items` -- extracted action items with assignee, deadline, and source utterance reference.
+- [x] **Twenty CRM Custom Data Engine** (`schema/crm.ts`):
   - `crm_objects` -- dynamic entity definitions (name, icon, description, org-scoped).
   - `crm_fields` -- field definitions per object (type: TEXT, NUMBER, SELECT, MULTI_SELECT, DATE, RELATION, URL, EMAIL, PHONE, BOOLEAN).
-  - `crm_records` -- actual data rows for each object.
-  - `crm_record_values` -- EAV (Entity-Attribute-Value) store for dynamic field values.
-  - `crm_relations` -- cross-object relation links.
-- [ ] **Kanban & Task OS**:
+  - `crm_records` -- actual data rows for each object, with a denormalized `data` JSON snapshot.
+  - `crm_record_values` -- EAV store for dynamic field values, with per-type indexed columns.
+  - `crm_relations` -- cross-object relation links, polymorphic to a CRM record or a Meeting.
+- [x] **Kanban & Task OS** (`schema/kanban.ts`):
   - `kanban_boards` -- board definitions (per org, per project, per meeting).
-  - `kanban_columns` -- ordered columns with status mapping.
-  - `tasks` -- cards with title, description, priority, assignee, due date, source (manual / AI-extracted).
+  - `kanban_columns` -- ordered columns with `status` mapping.
+  - `tasks` -- cards with title, description, priority, assignee, due date, `source` (manual / AI-extracted), and four provenance FKs.
   - `task_comments` -- threaded comments on tasks.
-  - `task_activity_log` -- audit trail of status changes, assignments, edits.
-- [ ] **AI & Vector Domain**:
+  - `task_activity_log` -- append-only audit trail of status changes, assignments, edits.
+- [x] **AI & Vector Domain** (`schema/ai.ts`):
   - `chat_sessions` -- conversation threads between user and Kara AI.
-  - `chat_messages` -- individual messages with role (user/assistant), content, citations.
+  - `chat_messages` -- individual messages with role (user/assistant), content, citations, and the persisted Laya route decision.
   - `vector_documents` -- metadata tracking for what has been embedded (meeting_id, chunk_index, embedding_status).
-- [ ] **Index Strategy**: Document which columns get B-tree indexes, which get composite indexes, and the rationale.
-- [ ] **Migration Strategy**: SQLite (dev) vs PostgreSQL (prod) compatibility constraints. Document any SQLite limitations to watch for (no ALTER COLUMN, no concurrent writes, etc.).
+- [x] **Index Strategy**: Documented in doc 08 §6 -- every index mapped to the query it serves, and the omitted ones justified.
+- [x] **Migration Strategy**: Documented in doc 08 §7 -- SQLite (dev) vs PostgreSQL (prod) constraints, the table-rebuild limitation, 999-parameter ceiling, and a concrete port order.
 
-### 2B. API Design & Endpoint Map
+### 2B. API Design & Endpoint Map (DESIGN ONLY -- NOT STARTED)
 
 - [ ] **RESTful Resource Map**: Document every endpoint with HTTP method, path, request/response Zod schemas, and auth requirements.
   - `/api/auth/*` -- Authentication flow.
@@ -103,20 +115,20 @@ Each phase produces a concrete, testable deliverable before moving to the next.
 
 ---
 
-## Phase 3: Data Models & Persistence Layer (`packages/db`) -- IMPLEMENTATION
+## Phase 3: Data Models & Persistence Layer (`packages/db`) -- IN PROGRESS
 
 > **Goal**: Implement the schemas designed in Phase 2 as actual ORM models with migrations.
 
-- [ ] Set up Drizzle ORM (or Prisma) configured for SQLite local dev with PostgreSQL production readiness.
-- [ ] Implement all table schemas from Phase 2A ERD.
-- [ ] Write and test migration scripts (create, seed, rollback).
+- [x] Set up Drizzle ORM (option chosen over Prisma; see doc 08 §1) configured for SQLite local dev with a documented PostgreSQL port path.
+- [x] Implement all table schemas from Phase 2A ERD -- 24 tables across 6 modules, plus the domain enums in `@kara/shared-types`.
+- [ ] Write and test migration scripts (create, seed, rollback) -- `drizzle-kit` is configured (`packages/db/drizzle.config.ts`) but no migration has been generated yet.
 - [ ] Write seed script to populate:
   - 2 sample organizations with 5 users each.
   - 10 sample meetings across different types and statuses.
   - Sample transcripts with realistic utterances.
   - 3 custom CRM objects (Deals, Partners, Candidates) with sample records.
   - Sample Kanban board with tasks in various statuses.
-- [ ] Export typed query helpers from `@kara/db` for use by `apps/api`.
+- [ ] Export typed query helpers from `@kara/db` for use by `apps/api` -- the schema and connection factory are exported; the packaged query helpers from doc 08 §5 are not yet.
 
 ---
 
@@ -216,10 +228,25 @@ Each phase produces a concrete, testable deliverable before moving to the next.
 | Phase | Name | Status | Key Deliverable |
 | :---: | :--- | :--- | :--- |
 | 1 | Monorepo Scaffolding | COMPLETE | Build-passing workspace |
-| 2 | Schema Design & Architecture | NOT STARTED | ERD, API map, route map, Laya plan (docs only) |
-| 3 | Data Models & Persistence | NOT STARTED | Working DB with seed data |
+| 2 | Schema Design & Architecture | 2A COMPLETE / 2B-2D NOT STARTED | ERD + 24-table schema (code); API map, route map, Laya plan still to do |
+| 3 | Data Models & Persistence | IN PROGRESS | Schema + Drizzle config landed; migrations, seed data, query helpers outstanding |
 | 4 | NestJS Backend & BullMQ | NOT STARTED | REST API + job queues |
 | 5 | Laya Decision Model | NOT STARTED | Local Python sidecar with 5 endpoints |
 | 6 | Mastra RAG & AI Agent | NOT STARTED | Non-hallucinatory chat with Laya routing |
 | 7 | Next.js Frontend | NOT STARTED | Full Notion/Twenty CRM UI |
 | 8 | Meeting Bot & E2E Testing | NOT STARTED | Complete pipeline test |
+
+---
+
+## Documentation Index
+
+| # | Document | Covers |
+| :---: | :--- | :--- |
+| 01 | [Architecture & System Overview](./01_ARCHITECTURE_AND_SYSTEM_OVERVIEW.md) | Monorepo layout, high-level system diagram, design rationale |
+| 02 | [Ultralight Local Stack Setup](./02_ULTRALIGHT_LOCAL_STACK_SETUP.md) | SQLite, ChromaDB, RustFS S3 local configuration |
+| 03 | [Meeting Bot & Transcription Pipeline](./03_MEETING_BOT_AND_TRANSCRIPTION_PIPELINE.md) | Stateless bot runner, batch ingestion, webhook contract |
+| 04 | [Non-Hallucinatory Mastra RAG](./04_NON_HALLUCINATORY_MASTRA_RAG.md) | Temporal guardrails, tool segregation, citation enforcement |
+| 05 | [Twenty CRM Custom Data Engine](./05_TWENTY_CRM_CUSTOM_DATA_ENGINE.md) | Dynamic objects/fields, UI patterns |
+| 06 | [Notion Kanban & Task Management](./06_NOTION_KANBAN_TASK_MANAGEMENT.md) | Task views, meeting↔task linking, conversational task management |
+| 07 | This document | Phased implementation roadmap |
+| 08 | [Database Schema Reference & Query Cookbook](./08_DATABASE_SCHEMA_REFERENCE_AND_QUERIES.md) | All 24 tables, ERD, conventions, query cookbook, index + migration strategy |
