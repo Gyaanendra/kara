@@ -1,0 +1,18 @@
+{
+  "name": "relevance_scoring",
+  "description": "Laya decision router schema for pre-filtering RAG search context chunks",
+  "questions": [
+    {
+      "id": "is_factually_relevant",
+      "question": "Does this meeting chunk directly contain the factual answers, decisions, or context asked by the user?",
+      "category": "RELEVANT",
+      "threshold": 0.60
+    },
+    {
+      "id": "is_topical_distraction",
+      "question": "Is this excerpt irrelevant conversational small talk, greeting, or off-topic chitchat?",
+      "category": "IRRELEVANT",
+      "threshold": 0.50
+    }
+  ]
+}

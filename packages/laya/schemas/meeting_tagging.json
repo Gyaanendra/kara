@@ -1,0 +1,31 @@
+{
+  "name": "meeting_tagging",
+  "description": "Laya decision router schema for classifying meeting types based on transcript overview",
+  "questions": [
+    {
+      "id": "is_standup",
+      "question": "Is this meeting a daily standup, sync, or status report covering yesterday, today, and blockers?",
+      "category": "STANDUP"
+    },
+    {
+      "id": "is_sprint_review",
+      "question": "Is this meeting an engineering sprint planning, architecture review, or roadmap milestone sync?",
+      "category": "SPRINT_REVIEW"
+    },
+    {
+      "id": "is_one_on_one",
+      "question": "Is this meeting a private 1-on-1 between a manager and direct report or two peers?",
+      "category": "ONE_ON_ONE"
+    },
+    {
+      "id": "is_client_call",
+      "question": "Is this meeting an external sales presentation, customer discovery, or client demo?",
+      "category": "CLIENT_CALL"
+    },
+    {
+      "id": "is_all_hands",
+      "question": "Is this meeting a company-wide town hall, executive address, or all-hands meeting?",
+      "category": "ALL_HANDS"
+    }
+  ]
+}

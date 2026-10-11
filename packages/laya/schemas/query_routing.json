@@ -1,0 +1,36 @@
+{
+  "name": "query_routing",
+  "description": "Laya decision router schema for fast intent reflex routing of user questions",
+  "questions": [
+    {
+      "id": "is_calendar_schedule",
+      "question": "Is the user asking about upcoming scheduled calendar meetings, future calls, or what is on their agenda today or tomorrow?",
+      "route": "UPCOMING_SCHEDULE",
+      "required_tool": "getUpcomingSchedule"
+    },
+    {
+      "id": "is_past_meeting_transcript",
+      "question": "Is the user asking what happened, what was discussed, what decisions were made, or what someone said in a past meeting?",
+      "route": "PAST_MEETINGS",
+      "required_tool": "getPastMeetings"
+    },
+    {
+      "id": "is_crm_query",
+      "question": "Is the user asking about CRM entities, sales pipeline deals, customer accounts, or candidate stages?",
+      "route": "CRM_DATA",
+      "required_tool": "queryCrmRecords"
+    },
+    {
+      "id": "is_task_action",
+      "question": "Is the user asking about Kanban tasks, to-do items, creating a task, or tracking deliverables?",
+      "route": "TASK_MANAGEMENT",
+      "required_tool": "manageTasks"
+    },
+    {
+      "id": "is_general_knowledge",
+      "question": "Is the user asking a general question requiring semantic vector retrieval across knowledge documents?",
+      "route": "KNOWLEDGE_SEARCH",
+      "required_tool": "searchKnowledgeBase"
+    }
+  ]
+}

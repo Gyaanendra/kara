@@ -1,0 +1,10 @@
+{
+  "name": "@kara/laya",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Laya decision model and fast reflex router sidecar",
+  "scripts": {
+    "start": "python server.py",
+    "dev": "uvicorn server:app --reload --port 8001"
+  }
+}

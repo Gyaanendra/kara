@@ -1,0 +1,30 @@
+{
+  "name": "utterance_classification",
+  "description": "Laya decision router schema for classifying spoken meeting utterances into actionable categories",
+  "questions": [
+    {
+      "id": "is_action_item",
+      "question": "Does this statement assign, commit to, or describe a pending task, deliverable, or action item to be done?",
+      "category": "ACTION_ITEM",
+      "threshold": 0.55
+    },
+    {
+      "id": "is_decision",
+      "question": "Does this statement express a finalized decision, architectural agreement, or official conclusion reached by the team?",
+      "category": "DECISION",
+      "threshold": 0.55
+    },
+    {
+      "id": "is_question",
+      "question": "Is the speaker asking a direct question, seeking clarification, or inquiring about status?",
+      "category": "QUESTION",
+      "threshold": 0.55
+    },
+    {
+      "id": "is_information",
+      "question": "Is the speaker sharing general background information, context, or conversational updates?",
+      "category": "INFORMATION",
+      "threshold": 0.40
+    }
+  ]
+}
