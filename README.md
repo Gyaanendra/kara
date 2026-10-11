@@ -101,6 +101,9 @@ kara/
 | **Tables & Data Grids** | TanStack Table | v9.2+ |
 | **Backend** | NestJS | 11.0+ |
 | **Queue Engine** | BullMQ + Redis | 6.0+ |
+| **Speech-to-Text** | Deepgram Nova-3 (Multilingual, Diarization, Timestamps) | v1 REST/WS |
+| **LLM Reasoning** | Groq (Llama 3.3 70B Versatile, 8B Instant) | OpenAI API |
+| **Reflex Router** | Laya Decision Model (Fast 33ms reflex) | HuggingFace |
 | **AI Agent Framework** | Mastra.ai (`@mastra/nestjs`) | Latest |
 | **Database** | PostgreSQL (Local Dev & Prod) | 18.6+ |
 | **Vector Store** | `pgvector` (Native in PostgreSQL) | Latest |
