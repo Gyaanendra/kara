@@ -49,7 +49,7 @@ graph TD
     Bot -->|"Stream Raw Audio"| RustFS[("Self-hosted RustFS S3 on Oracle VPS")]
     Bot -->|"Report Completion Event"| API
 
-    RedisBroker -->|"Consume Transcription"| Worker["Whisper Worker"]
+    RedisBroker -->|"Consume Transcription"| Worker["Deepgram Nova-3 Multilingual Worker"]
     Worker -->|"Ingest Utterances & MOM"| API
     MastraService -->|"Vector Search with Temporal Filters"| PostgresDB[("PostgreSQL 18 + pgvector")]
     API -->|"Relational Data & JSONB"| PostgresDB

@@ -1,12 +1,14 @@
 import { relations } from "drizzle-orm";
 import {
+  doublePrecision,
   index,
   integer,
-  real,
-  sqliteTable,
+  jsonb,
+  pgTable,
   text,
+  timestamp,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 import {
   MeetingPlatform,
   MeetingStatus,
@@ -20,68 +22,53 @@ import {
 import { bool, createdAt, deletedAt, orgId, primaryId, updatedAt } from "../columns.js";
 import { organizations, users } from "./auth.js";
 
-/**
- * Enum columns use `.$type<Enum>()` — see the note in `auth.ts`. On SQLite the `enum`
- * config is a type-inference helper that emits no DDL, so `$type` is equivalent while
- * also accepting a TypeScript enum object.
- */
-
-/**
- * A calendar event or ad-hoc call. This is the table the entire non-hallucinatory
- * guarantee in doc 04 rests on: `status` + `actual_end_at` are the two columns the
- * agent tools filter on, and `meetings_org_status_end_idx` is the index that makes
- * those filters a range scan rather than a full table scan.
- */
-export const meetings = sqliteTable(
+export const meetings = pgTable(
   "meetings",
   {
     id: primaryId("meet"),
     orgId: orgId().references(() => organizations.id, { onDelete: "cascade" }),
+    hostUserId: text("host_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
     title: text("title").notNull(),
     description: text("description"),
-    externalId: text("external_id"),
-    platform: text("platform").$type<MeetingPlatform>().notNull().default(MeetingPlatform.OTHER),
+    platform: text("platform").$type<MeetingPlatform>().notNull().default(MeetingPlatform.GOOGLE_MEET),
+    meetingUrl: text("meeting_url"),
+    nativeMeetingId: text("native_meeting_id"),
+    passcode: text("passcode"),
+
     status: text("status").$type<MeetingStatus>().notNull().default(MeetingStatus.SCHEDULED),
-    /** Assigned post-MOM by the Laya meeting auto-tagger (doc 07 §2D). */
     meetingType: text("meeting_type").$type<MeetingType>(),
+    typeConfidence: doublePrecision("type_confidence"),
 
-    scheduledStartAt: integer("scheduled_start_at", { mode: "timestamp_ms" }).notNull(),
-    scheduledEndAt: integer("scheduled_end_at", { mode: "timestamp_ms" }),
-    actualStartAt: integer("actual_start_at", { mode: "timestamp_ms" }),
-    actualEndAt: integer("actual_end_at", { mode: "timestamp_ms" }),
+    scheduledStartAt: timestamp("scheduled_start_at", { withTimezone: true, mode: "date" }).notNull(),
+    scheduledEndAt: timestamp("scheduled_end_at", { withTimezone: true, mode: "date" }),
+    actualStartAt: timestamp("actual_start_at", { withTimezone: true, mode: "date" }),
+    actualEndAt: timestamp("actual_end_at", { withTimezone: true, mode: "date" }),
 
-    joinUrl: text("join_url"),
-    calendarEventId: text("calendar_event_id"),
+    botJoinedAt: timestamp("bot_joined_at", { withTimezone: true, mode: "date" }),
+    botLeftAt: timestamp("bot_left_at", { withTimezone: true, mode: "date" }),
+    botErrorMessage: text("bot_error_message"),
+
     calendarProvider: text("calendar_provider"),
-    hostUserId: text("host_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
+    calendarEventId: text("calendar_event_id"),
 
-    // Bot lifecycle — written only by authenticated bot webhooks (doc 03 §3).
-    botDispatchedAt: integer("bot_dispatched_at", { mode: "timestamp_ms" }),
-    botJoinedAt: integer("bot_joined_at", { mode: "timestamp_ms" }),
-    botLeftAt: integer("bot_left_at", { mode: "timestamp_ms" }),
-    botFailureReason: text("bot_failure_reason"),
-
-    durationSeconds: integer("duration_seconds"),
-    isRecorded: bool("is_recorded").notNull().default(false),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
 
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
   },
   (t) => [
-    // Driver for `getPastMeetings` / `getUpcomingSchedule` (doc 04 §2A).
-    index("meetings_org_status_end_idx").on(t.orgId, t.status, t.actualEndAt),
-    index("meetings_org_scheduled_start_idx").on(t.orgId, t.scheduledStartAt),
-    index("meetings_host_user_idx").on(t.hostUserId),
+    index("meetings_org_status_start_idx").on(t.orgId, t.status, t.scheduledStartAt),
+    index("meetings_host_idx").on(t.hostUserId),
     index("meetings_calendar_event_idx").on(t.calendarEventId),
     index("meetings_meeting_type_idx").on(t.orgId, t.meetingType),
   ],
 );
 
-/** Raw audio object in RustFS S3. One meeting may have several (e.g. re-connects). */
-export const recordings = sqliteTable(
+export const recordings = pgTable(
   "recordings",
   {
     id: primaryId("rec"),
@@ -99,11 +86,10 @@ export const recordings = sqliteTable(
     durationSeconds: integer("duration_seconds"),
     sampleRate: integer("sample_rate"),
     channels: integer("channels"),
-    /** S3 multipart ETag — used to dedupe replayed upload webhooks. */
     checksum: text("checksum"),
 
     status: text("status").$type<RecordingStatus>().notNull().default(RecordingStatus.UPLOADING),
-    uploadedAt: integer("uploaded_at", { mode: "timestamp_ms" }),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true, mode: "date" }),
 
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -115,8 +101,7 @@ export const recordings = sqliteTable(
   ],
 );
 
-/** One diarized transcript document per recording. */
-export const transcripts = sqliteTable(
+export const transcripts = pgTable(
   "transcripts",
   {
     id: primaryId("trn"),
@@ -129,19 +114,17 @@ export const transcripts = sqliteTable(
     }),
 
     language: text("language").notNull().default("en"),
-    provider: text("provider").notNull().default("groq-whisper"),
+    provider: text("provider").notNull().default("deepgram-nova-3"),
     model: text("model"),
     status: text("status").$type<TranscriptStatus>().notNull().default(TranscriptStatus.PENDING),
 
     wordCount: integer("word_count"),
     utteranceCount: integer("utterance_count"),
-    /** Mean diarization confidence across utterances, 0..1. */
-    confidence: real("confidence"),
-    /** Untouched provider response, retained for re-processing without re-download. */
-    rawPayload: text("raw_payload", { mode: "json" }).$type<Record<string, unknown>>(),
+    confidence: doublePrecision("confidence"),
+    rawPayload: jsonb("raw_payload").$type<Record<string, unknown>>(),
 
-    processingStartedAt: integer("processing_started_at", { mode: "timestamp_ms" }),
-    processingCompletedAt: integer("processing_completed_at", { mode: "timestamp_ms" }),
+    processingStartedAt: timestamp("processing_started_at", { withTimezone: true, mode: "date" }),
+    processingCompletedAt: timestamp("processing_completed_at", { withTimezone: true, mode: "date" }),
     errorMessage: text("error_message"),
 
     createdAt: createdAt(),
@@ -153,12 +136,7 @@ export const transcripts = sqliteTable(
   ],
 );
 
-/**
- * A single speaker turn. `start_ms`/`end_ms` are offsets from the start of the
- * recording — this is exactly what the UI deep-links to from a task ("Origin:
- * Product Strategy Sync, 14:32", doc 06 §2).
- */
-export const utterances = sqliteTable(
+export const utterances = pgTable(
   "utterances",
   {
     id: primaryId("utt"),
@@ -170,7 +148,6 @@ export const utterances = sqliteTable(
       .notNull()
       .references(() => transcripts.id, { onDelete: "cascade" }),
 
-    /** Diarization label (`SPEAKER_00`); resolved to a real user when possible. */
     speakerLabel: text("speaker_label").notNull(),
     speakerUserId: text("speaker_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -180,14 +157,11 @@ export const utterances = sqliteTable(
     startMs: integer("start_ms").notNull(),
     endMs: integer("end_ms").notNull(),
     text: text("text").notNull(),
-    /** Monotonic ordering within the transcript; the cursor for streaming readers. */
     sequence: integer("sequence").notNull(),
 
-    // Laya post-transcription classifier output (doc 07 §2D).
     type: text("type").$type<UtteranceType>().notNull().default(UtteranceType.INFORMATION),
-    typeConfidence: real("type_confidence"),
+    typeConfidence: doublePrecision("type_confidence"),
 
-    // Laya content guard output — flagged rows are excluded from RAG indexing.
     isSensitive: bool("is_sensitive").notNull().default(false),
     sensitivityReason: text("sensitivity_reason"),
 
@@ -201,8 +175,7 @@ export const utterances = sqliteTable(
   ],
 );
 
-/** Join table linking users (and external attendees) to a meeting. */
-export const meetingParticipants = sqliteTable(
+export const meetingParticipants = pgTable(
   "meeting_participants",
   {
     id: primaryId("par"),
@@ -210,32 +183,25 @@ export const meetingParticipants = sqliteTable(
     meetingId: text("meeting_id")
       .notNull()
       .references(() => meetings.id, { onDelete: "cascade" }),
-    /** NULL for external attendees who have no Kara account. */
     userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
 
     role: text("role").$type<ParticipantRole>().notNull().default(ParticipantRole.ATTENDEE),
     displayName: text("display_name").notNull(),
     email: text("email"),
 
-    joinedAt: integer("joined_at", { mode: "timestamp_ms" }),
-    leftAt: integer("left_at", { mode: "timestamp_ms" }),
+    joinedAt: timestamp("joined_at", { withTimezone: true, mode: "date" }),
+    leftAt: timestamp("left_at", { withTimezone: true, mode: "date" }),
     attendanceSeconds: integer("attendance_seconds"),
     isBot: bool("is_bot").notNull().default(false),
 
     createdAt: createdAt(),
   },
   (t) => [
-    // SQLite treats NULLs as distinct in UNIQUE indexes, so any number of external
-    // (user_id IS NULL) attendees can coexist on one meeting.
     uniqueIndex("meeting_participants_meeting_user_unique").on(t.meetingId, t.userId),
     index("meeting_participants_user_idx").on(t.userId),
     index("meeting_participants_role_idx").on(t.meetingId, t.role),
   ],
 );
-
-// ---------------------------------------------------------------------------
-// Relations
-// ---------------------------------------------------------------------------
 
 export const meetingsRelations = relations(meetings, ({ one, many }) => ({
   organization: one(organizations, {

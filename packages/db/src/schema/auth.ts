@@ -1,24 +1,13 @@
 import { relations } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, pgTable, text, uniqueIndex, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { MembershipStatus, UserRole } from "@kara/shared-types";
 
 import { bool, createdAt, deletedAt, orgId, primaryId, updatedAt } from "../columns.js";
 
-/** Subscription tiers. Kept as a literal union so `text().$type<OrgPlan>()` stays narrow. */
 export type OrgPlan = "FREE" | "TEAM" | "BUSINESS" | "ENTERPRISE";
 
-/**
- * Enum columns use `.$type<Enum>()` rather than `{ enum: [...] }`.
- *
- * On SQLite the `enum` config is a type-inference helper only — it emits no DDL (there
- * is no `CREATE TYPE`, and drizzle-kit writes a plain `TEXT` column either way). The
- * only real enforcement is compile-time, which `$type` provides directly while also
- * accepting a TypeScript enum object. When the PostgreSQL port lands (doc 08 §7),
- * these become `pgEnum` (or `text` + `CHECK`) and gain database-level enforcement.
- */
-
 /** Tenant root. Every other domain table hangs off an organization. */
-export const organizations = sqliteTable(
+export const organizations = pgTable(
   "organizations",
   {
     id: primaryId("org"),
@@ -27,7 +16,7 @@ export const organizations = sqliteTable(
     domain: text("domain"),
     logoUrl: text("logo_url"),
     plan: text("plan").$type<OrgPlan>().notNull().default("FREE"),
-    settings: text("settings", { mode: "json" }).$type<Record<string, unknown>>(),
+    settings: jsonb("settings").$type<Record<string, unknown>>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
@@ -38,20 +27,18 @@ export const organizations = sqliteTable(
   ],
 );
 
-export const users = sqliteTable(
+export const users = pgTable(
   "users",
   {
     id: primaryId("usr"),
     email: text("email").notNull(),
     name: text("name").notNull(),
     avatarUrl: text("avatar_url"),
-    /** Null for SSO-only accounts; argon2id hash when using credential login. */
     passwordHash: text("password_hash"),
-    /** Platform-wide default role. Per-org authority lives on `org_memberships.role`. */
     role: text("role").$type<UserRole>().notNull().default(UserRole.MEMBER),
     timezone: text("timezone").notNull().default("UTC"),
     isActive: bool("is_active").notNull().default(true),
-    lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true, mode: "date" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),
@@ -63,12 +50,7 @@ export const users = sqliteTable(
   ],
 );
 
-/**
- * Join table granting a user access to an organization.
- * The `(org_id, user_id)` unique index is what makes membership idempotent when an
- * invite webhook is retried.
- */
-export const orgMemberships = sqliteTable(
+export const orgMemberships = pgTable(
   "org_memberships",
   {
     id: primaryId("mem"),
@@ -81,7 +63,7 @@ export const orgMemberships = sqliteTable(
     invitedById: text("invited_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    joinedAt: integer("joined_at", { mode: "timestamp_ms" }),
+    joinedAt: timestamp("joined_at", { withTimezone: true, mode: "date" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -91,10 +73,6 @@ export const orgMemberships = sqliteTable(
     index("org_memberships_org_status_idx").on(t.orgId, t.status),
   ],
 );
-
-// ---------------------------------------------------------------------------
-// Relations
-// ---------------------------------------------------------------------------
 
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   memberships: many(orgMemberships),

@@ -1,26 +1,12 @@
 import { relations } from "drizzle-orm";
-import {
-  index,
-  integer,
-  real,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from "drizzle-orm/sqlite-core";
-import { ActionItemStatus, MomStatus, TaskPriority } from "@kara/shared-types";
+import { index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { ActionItemStatus, MomStatus } from "@kara/shared-types";
 
 import { createdAt, orgId, primaryId, updatedAt } from "../columns.js";
 import { organizations, users } from "./auth.js";
 import { meetings, utterances } from "./meetings.js";
 
-/** Enum columns use `.$type<Enum>()` — see the note in `auth.ts`. */
-
-/**
- * Minutes of Meeting — exactly one per meeting, produced by the Mastra
- * `mom-synthesis` workflow (doc 07 Phase 4). `status` lets the UI show a skeleton
- * while generation is in flight rather than blocking on the LLM.
- */
-export const moms = sqliteTable(
+export const moms = pgTable(
   "moms",
   {
     id: primaryId("mom"),
@@ -30,34 +16,25 @@ export const moms = sqliteTable(
       .references(() => meetings.id, { onDelete: "cascade" }),
 
     status: text("status").$type<MomStatus>().notNull().default(MomStatus.PENDING),
-    title: text("title").notNull(),
-    /** Markdown body rendered in the MOM "Summary" tab. */
-    summary: text("summary"),
+
     executiveSummary: text("executive_summary"),
+    keyTopics: jsonb("key_topics").$type<string[]>(),
     sentiment: text("sentiment"),
-
-    topics: text("topics", { mode: "json" }).$type<string[]>(),
-    keywords: text("keywords", { mode: "json" }).$type<string[]>(),
-
     model: text("model"),
-    promptVersion: text("prompt_version"),
-    tokenUsage: text("token_usage", { mode: "json" }).$type<Record<string, number>>(),
-
-    generatedAt: integer("generated_at", { mode: "timestamp_ms" }),
+    generationDurationMs: integer("generation_duration_ms"),
+    rawOutput: jsonb("raw_output").$type<Record<string, unknown>>(),
     errorMessage: text("error_message"),
 
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
-    // One MOM per meeting — makes the synthesis job idempotent under BullMQ retries.
-    uniqueIndex("moms_meeting_unique").on(t.meetingId),
+    index("moms_meeting_idx").on(t.meetingId),
     index("moms_status_idx").on(t.status),
   ],
 );
 
-/** A key decision extracted from the transcript, with its supporting verbatim quote. */
-export const momDecisions = sqliteTable(
+export const momDecisions = pgTable(
   "mom_decisions",
   {
     id: primaryId("dec"),
@@ -69,33 +46,23 @@ export const momDecisions = sqliteTable(
       .notNull()
       .references(() => meetings.id, { onDelete: "cascade" }),
 
-    statement: text("statement").notNull(),
-    /** Verbatim transcript text that justifies the decision — the anti-hallucination proof. */
-    contextQuote: text("context_quote"),
+    decision: text("decision").notNull(),
+    rationale: text("rationale"),
     sourceUtteranceId: text("source_utterance_id").references(() => utterances.id, {
       onDelete: "set null",
     }),
-    decidedByUserId: text("decided_by_user_id").references(() => users.id, {
-      onDelete: "set null",
-    }),
-    decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
-    confidence: real("confidence"),
+    contextQuote: text("context_quote"),
     sequence: integer("sequence").notNull().default(0),
 
     createdAt: createdAt(),
   },
   (t) => [
-    index("mom_decisions_mom_idx").on(t.momId, t.sequence),
+    index("mom_decisions_mom_idx").on(t.momId),
     index("mom_decisions_meeting_idx").on(t.meetingId),
   ],
 );
 
-/**
- * An extracted action item. Note the link to a Kanban task is stored on the *task*
- * side (`tasks.source_action_item_id`), not here — that keeps this module free of a
- * circular import with `kanban.ts` and gives the relationship a single owner.
- */
-export const momActionItems = sqliteTable(
+export const momActionItems = pgTable(
   "mom_action_items",
   {
     id: primaryId("act"),
@@ -113,34 +80,36 @@ export const momActionItems = sqliteTable(
     assigneeUserId: text("assignee_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
-    /** Name exactly as heard, kept when diarization could not be resolved to a user. */
     assigneeNameRaw: text("assignee_name_raw"),
-    dueDate: integer("due_date", { mode: "timestamp_ms" }),
+    dueDate: timestamp("due_date", { withTimezone: true, mode: "date" }),
 
-    priority: text("priority").$type<TaskPriority>().notNull().default(TaskPriority.MEDIUM),
     status: text("status").$type<ActionItemStatus>().notNull().default(ActionItemStatus.OPEN),
 
     sourceUtteranceId: text("source_utterance_id").references(() => utterances.id, {
       onDelete: "set null",
     }),
-    confidence: real("confidence"),
+    audioDeepLinkMs: integer("audio_deep_link_ms"),
+
+    promotedTaskId: text("promoted_task_id"),
+
     sequence: integer("sequence").notNull().default(0),
 
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
-    index("mom_action_items_mom_idx").on(t.momId, t.sequence),
-    index("mom_action_items_assignee_idx").on(t.assigneeUserId, t.status),
+    index("mom_action_items_mom_idx").on(t.momId),
     index("mom_action_items_meeting_idx").on(t.meetingId),
+    index("mom_action_items_assignee_idx").on(t.assigneeUserId),
+    index("mom_action_items_status_idx").on(t.status),
   ],
 );
 
-// ---------------------------------------------------------------------------
-// Relations
-// ---------------------------------------------------------------------------
-
 export const momsRelations = relations(moms, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [moms.orgId],
+    references: [organizations.id],
+  }),
   meeting: one(meetings, {
     fields: [moms.meetingId],
     references: [meetings.id],
@@ -150,7 +119,10 @@ export const momsRelations = relations(moms, ({ one, many }) => ({
 }));
 
 export const momDecisionsRelations = relations(momDecisions, ({ one }) => ({
-  mom: one(moms, { fields: [momDecisions.momId], references: [moms.id] }),
+  mom: one(moms, {
+    fields: [momDecisions.momId],
+    references: [moms.id],
+  }),
   meeting: one(meetings, {
     fields: [momDecisions.meetingId],
     references: [meetings.id],
@@ -159,14 +131,13 @@ export const momDecisionsRelations = relations(momDecisions, ({ one }) => ({
     fields: [momDecisions.sourceUtteranceId],
     references: [utterances.id],
   }),
-  decidedBy: one(users, {
-    fields: [momDecisions.decidedByUserId],
-    references: [users.id],
-  }),
 }));
 
 export const momActionItemsRelations = relations(momActionItems, ({ one }) => ({
-  mom: one(moms, { fields: [momActionItems.momId], references: [moms.id] }),
+  mom: one(moms, {
+    fields: [momActionItems.momId],
+    references: [moms.id],
+  }),
   meeting: one(meetings, {
     fields: [momActionItems.meetingId],
     references: [meetings.id],

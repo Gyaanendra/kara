@@ -1,12 +1,14 @@
 import { relations } from "drizzle-orm";
 import {
+  doublePrecision,
   index,
   integer,
-  real,
-  sqliteTable,
+  jsonb,
+  pgTable,
   text,
+  timestamp,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 import {
   ChatRole,
   ChatRoute,
@@ -14,39 +16,28 @@ import {
   MeetingStatus,
 } from "@kara/shared-types";
 
-import { bool, createdAt, deletedAt, orgId, primaryId, updatedAt } from "../columns.js";
+import { bool, createdAt, deletedAt, orgId, pgVector, primaryId, updatedAt } from "../columns.js";
 import { organizations, users } from "./auth.js";
 import { meetings, transcripts, utterances } from "./meetings.js";
 
-/** Enum columns use `.$type<Enum>()` — see the note in `auth.ts`. */
-
-/**
- * A citation surfaced as a clickable pill in the chat UI (doc 07 Phase 7).
- * Every assistant claim must carry at least one of these — that is the
- * citation-enforcement rule from doc 04 §3 made structural.
- */
 export interface ChatCitation {
   meetingId: string;
   meetingTitle: string;
-  /** Unix ms — what the UI converts to the "MM:SS" deep-link. */
   meetingTimestampMs: number;
   utteranceId?: string;
   speaker?: string;
   snippet: string;
 }
 
-/** A single Laya route decision plus the tool invocation it produced. */
 export interface ChatToolCall {
   route: ChatRoute;
   toolName: string;
   input: Record<string, unknown>;
-  /** Truncated tool output, kept for the debug drawer rather than for replay. */
   outputPreview?: string;
   durationMs?: number;
 }
 
-/** A conversation thread between a user and Kara. */
-export const chatSessions = sqliteTable(
+export const chatSessions = pgTable(
   "chat_sessions",
   {
     id: primaryId("cht"),
@@ -56,13 +47,12 @@ export const chatSessions = sqliteTable(
       .references(() => users.id, { onDelete: "cascade" }),
 
     title: text("title"),
-    /** Route chosen for the most recent turn — drives the query-route badge. */
     route: text("route").$type<ChatRoute>(),
     messageCount: integer("message_count").notNull().default(0),
 
     isPinned: bool("is_pinned").notNull().default(false),
     isArchived: bool("is_archived").notNull().default(false),
-    lastMessageAt: integer("last_message_at", { mode: "timestamp_ms" }),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true, mode: "date" }),
 
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -74,14 +64,7 @@ export const chatSessions = sqliteTable(
   ],
 );
 
-/**
- * One message in a session.
- *
- * `route` + `routeConfidence` record what Laya decided *before* the LLM ran
- * (doc 07 §2D "Query Router"). Persisting it lets the UI show the route badge and
- * lets us measure router accuracy offline without re-running inference.
- */
-export const chatMessages = sqliteTable(
+export const chatMessages = pgTable(
   "chat_messages",
   {
     id: primaryId("msg"),
@@ -94,14 +77,13 @@ export const chatMessages = sqliteTable(
     content: text("content").notNull(),
 
     route: text("route").$type<ChatRoute>(),
-    routeConfidence: real("route_confidence"),
+    routeConfidence: doublePrecision("route_confidence"),
 
-    citations: text("citations", { mode: "json" }).$type<ChatCitation[]>(),
-    toolCalls: text("tool_calls", { mode: "json" }).$type<ChatToolCall[]>(),
-    tokenUsage: text("token_usage", { mode: "json" }).$type<Record<string, number>>(),
+    citations: jsonb("citations").$type<ChatCitation[]>(),
+    toolCalls: jsonb("tool_calls").$type<ChatToolCall[]>(),
+    tokenUsage: jsonb("token_usage").$type<Record<string, number>>(),
 
     model: text("model"),
-    /** End-to-end wall time, including Laya routing and vector retrieval. */
     latencyMs: integer("latency_ms"),
     errorMessage: text("error_message"),
 
@@ -113,21 +95,7 @@ export const chatMessages = sqliteTable(
   ],
 );
 
-/**
- * Relational mirror of the vector payload described in doc 04 §3.
- *
- * ChromaDB/Qdrant own the vectors; this table owns the *provenance*. Two reasons it
- * exists rather than trusting collection metadata alone:
- *  1. `meeting_status` and `meeting_timestamp_ms` are denormalized here so the
- *     indexer can re-derive the hard filter (`status = COMPLETED AND ts <= now`)
- *     without a join, and so a meeting flipping to `CANCELLED` can mark its chunks STALE.
- *  2. It gives the UI a way to list "what is indexed for this meeting" and to force
- *     a re-index, neither of which vector stores expose ergonomically.
- *
- * `external_vector_id` is the id inside the vector store; deleting a row here is what
- * a re-index uses to know which vectors to replace.
- */
-export const vectorDocuments = sqliteTable(
+export const vectorDocuments = pgTable(
   "vector_documents",
   {
     id: primaryId("vec"),
@@ -142,24 +110,26 @@ export const vectorDocuments = sqliteTable(
       onDelete: "set null",
     }),
 
-    /** Vector store collection / namespace, e.g. `kara_transcripts`. */
     collection: text("collection").notNull().default("kara_transcripts"),
     externalVectorId: text("external_vector_id"),
     chunkIndex: integer("chunk_index").notNull().default(0),
     chunkText: text("chunk_text").notNull(),
     tokenCount: integer("token_count"),
 
-    // Denormalized filter columns — see class doc comment above.
-    meetingTimestampMs: integer("meeting_timestamp_ms").notNull(),
+    // Denormalized temporal guardrail filter columns
+    meetingTimestampMs: doublePrecision("meeting_timestamp_ms").notNull(),
     meetingStatus: text("meeting_status").$type<MeetingStatus>().notNull(),
     speaker: text("speaker"),
+
+    // Native pgvector column (1536 dimensions for standard text embedding models)
+    embedding: pgVector("embedding", { dimensions: 1536 }),
 
     embeddingStatus: text("embedding_status")
       .$type<EmbeddingStatus>()
       .notNull()
       .default(EmbeddingStatus.PENDING),
     embeddingModel: text("embedding_model"),
-    indexedAt: integer("indexed_at", { mode: "timestamp_ms" }),
+    indexedAt: timestamp("indexed_at", { withTimezone: true, mode: "date" }),
     errorMessage: text("error_message"),
 
     createdAt: createdAt(),
@@ -167,16 +137,11 @@ export const vectorDocuments = sqliteTable(
   },
   (t) => [
     uniqueIndex("vector_documents_meeting_chunk_unique").on(t.meetingId, t.chunkIndex),
-    // Drives the temporal guardrail query in doc 04 §3.
     index("vector_documents_meeting_status_ts_idx").on(t.meetingStatus, t.meetingTimestampMs),
     index("vector_documents_embedding_status_idx").on(t.embeddingStatus),
     index("vector_documents_collection_idx").on(t.collection),
   ],
 );
-
-// ---------------------------------------------------------------------------
-// Relations
-// ---------------------------------------------------------------------------
 
 export const chatSessionsRelations = relations(chatSessions, ({ one, many }) => ({
   organization: one(organizations, {

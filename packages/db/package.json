@@ -10,17 +10,20 @@
     "clean": "rmdir /s /q dist",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:push": "drizzle-kit push --force",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "node -e \"import('./dist/seed.js').then(m => m.seed())\""
   },
   "dependencies": {
     "@kara/shared-types": "workspace:*",
-    "better-sqlite3": "^12.2.0",
-    "drizzle-orm": "^0.44.2"
+    "dotenv": "^18.0.7",
+    "drizzle-orm": "^0.44.2",
+    "pg": "^8.23.1",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.14.0",
+    "@types/pg": "^8.23.1",
     "drizzle-kit": "^0.31.1",
     "typescript": "^5.8.2"
   }
