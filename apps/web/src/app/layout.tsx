@@ -1,22 +1,26 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Unbounded, Albert_Sans } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "../components/Sidebar";
-import { Header } from "../components/Header";
+import { AppShell } from "../components/layout/AppShell";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const unbounded = Unbounded({
+  variable: "--font-unbounded",
   subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700", "800"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const albertSans = Albert_Sans({
+  variable: "--font-albert",
   subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
-  title: "Kara AI — Autonomous AI Chief of Staff & Intelligent Workspace OS",
-  description: "Enterprise meeting intelligence, Notion-style task workflows, Twenty CRM engine, and grounded conversational RAG.",
+  title: "Fulcrum OS — Intelligence & Growth Platform",
+  description:
+    "Enterprise AI Chief of Staff & Intelligent Workspace: Activation, Growth Telemetry, and AI Agent Sidecar.",
 };
 
 export default function RootLayout({
@@ -27,16 +31,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full dark antialiased bg-zinc-950 text-zinc-100`}
+      className={`${unbounded.variable} ${albertSans.variable} h-full antialiased`}
     >
-      <body className="h-full flex overflow-hidden">
-        <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-          <Header />
-          <main className="flex-1 overflow-y-auto bg-zinc-900/40">
-            {children}
-          </main>
-        </div>
+      <body className="h-full w-full overflow-hidden text-neutral-900 dark:text-neutral-100 selection:bg-[#816797]/30">
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

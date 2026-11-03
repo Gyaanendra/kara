@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/runner.js",
-    "dev": "tsx src/runner.ts"
+    "dev": "tsc --watch",
+    "bot:run": "tsx src/runner.ts"
   },
   "dependencies": {
     "@kara/shared-types": "workspace:*"
