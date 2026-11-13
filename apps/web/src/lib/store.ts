@@ -9,7 +9,7 @@ import {
   Code2,
   type LucideIcon,
 } from "lucide-react";
-import { fetchApi } from "./api";
+import { fetchApi, API_BASE_URL } from "./api";
 
 export type NavModule =
   | "overview"
@@ -328,7 +328,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           m.id === agentMsgId
             ? {
                 ...m,
-                text: `Kara AI Chief encountered an error connecting to local API (http://localhost:4000/api): ${err.message}. Please ensure the backend NestJS service is running with 'pnpm --filter api start:dev'.`,
+                text: `Kara AI Chief encountered an error connecting to local API (${API_BASE_URL}): ${err.message}. Please ensure the backend NestJS service is running.`,
                 isLoading: false,
               }
             : m,

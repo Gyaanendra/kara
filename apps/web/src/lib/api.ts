@@ -1,8 +1,11 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined" ? "/api" : "http://localhost:4000/api");
 export const DEFAULT_ORG_ID = "org_76a82f1024344d4db6d8a588";
 
 export async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  const cleanPath = path.startsWith("/api/") ? path.slice(4) : path.startsWith("/") ? path : `/${path}`;
+  const url = `${API_BASE_URL}${cleanPath}`;
   const headers = {
     "Content-Type": "application/json",
     "x-org-id": DEFAULT_ORG_ID,

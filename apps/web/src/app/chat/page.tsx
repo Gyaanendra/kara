@@ -83,6 +83,61 @@ export default function ChatPage() {
 
       {/* Message Stream */}
       <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        {chatMessages.length <= 1 && (
+          <div className="py-6 max-w-xl mx-auto text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl mx-auto bg-accent-soft border border-accent/30 flex items-center justify-center text-accent shadow-sm">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="font-unbounded text-base font-bold text-ink">
+                Autonomous Chief of Staff
+              </h2>
+              <p className="font-albert text-xs text-ink-secondary mt-1 max-w-md mx-auto">
+                Ask anything about your meetings, tasks, team directory, and deals. Every answer is strictly grounded with verified audio timestamp citations.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left pt-2">
+              {[
+                {
+                  title: "Decisions on DB Migration?",
+                  desc: "PostgreSQL 18 standardization & pgvector status",
+                  query: "What decisions were made on database migration?",
+                },
+                {
+                  title: "Check Query Cloud SLA Credit",
+                  desc: "10% SLA credit penalty threshold at 99.9% uptime",
+                  query: "What penalty applies if Query Cloud uptime drops below 99.9%?",
+                },
+                {
+                  title: "Vertex Health 3% Price Cap",
+                  desc: "Approved contract amendment in Customer SLA Audit",
+                  query: "What was approved for Vertex Health price cap?",
+                },
+                {
+                  title: "Summarize Growth Standup",
+                  desc: "FinCorp $148,000 deal & contractor staffing",
+                  query: "Summarize yesterday's standup regarding FinCorp deal",
+                },
+              ].map((card, idx) => (
+                <button
+                  key={idx}
+                  disabled={isChatLoading}
+                  onClick={() => handleSend(card.query)}
+                  className="p-3 rounded-xl bg-card border border-line hover:border-accent/50 hover:bg-hovered/70 transition-all text-left space-y-1 shadow-2xs cursor-pointer group"
+                >
+                  <span className="font-unbounded text-[11px] font-semibold text-ink group-hover:text-accent block">
+                    {card.title}
+                  </span>
+                  <span className="font-albert text-[10px] text-ink-muted block line-clamp-1">
+                    {card.desc}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {chatMessages.map((msg) => (
           <div
             key={msg.id}

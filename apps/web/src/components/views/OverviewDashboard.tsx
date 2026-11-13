@@ -146,18 +146,58 @@ export function OverviewDashboard() {
     loadData();
   };
 
+  const meetingOwnerMap: Record<string, { owner: string; tasks: string; impact: string }> = {
+    "Q3 Architecture & Database Standup": {
+      owner: "Alan Chen (Engineering)",
+      tasks: "6 tasks in Kanban",
+      impact: "$450,000",
+    },
+    "Enterprise Deal Review — Query Cloud": {
+      owner: "Helena Derwent (Finance)",
+      tasks: "4 obligations created",
+      impact: "$125,000",
+    },
+    "Customer SLA & Price Cap Audit": {
+      owner: "Subash K. (Security)",
+      tasks: "2 price caps checked",
+      impact: "$56,900",
+    },
+    "Weekly Executive Standup — Growth": {
+      owner: "Sarah Jenkins (Procurement)",
+      tasks: "8 tasks in Kanban",
+      impact: "$148,000",
+    },
+    "Security & Compliance SOC2 Type II Audit": {
+      owner: "Subash K. (Security)",
+      tasks: "5 tasks in Kanban",
+      impact: "$85,000",
+    },
+    "Q4 Cloud Infrastructure & GPU Budget": {
+      owner: "Alex Rivera (Product)",
+      tasks: "3 tasks in Kanban",
+      impact: "$220,000",
+    },
+  };
+
   // Build live table rows from actual database records
   const allRows: TableRowData[] = liveMeetings.length > 0
-    ? liveMeetings.map((m, idx) => ({
-        id: m.id,
-        name: m.title,
-        platform: m.platform ? m.platform.replace("_", " ") : "Google Meet",
-        status: m.status === "COMPLETED" ? "synthesized" : m.status === "RECORDING" ? "processing" : "assigned",
-        statusLabel: m.status === "COMPLETED" ? "MOM Synthesized" : m.status === "RECORDING" ? "Live Recording" : "Scheduled",
-        tasks: `${(idx + 1) * 2} tasks in Kanban`,
-        owner: m.description || "Executive Squad",
-        impact: `$${((idx + 1) * 75000 + 50000).toLocaleString()}`,
-      }))
+    ? liveMeetings.map((m, idx) => {
+        const meta = meetingOwnerMap[m.title] || {
+          owner: m.description?.split(" ")[0] || "Executive Squad",
+          tasks: `${(idx + 1) * 2} tasks in Kanban`,
+          impact: `$${((idx + 1) * 60000 + 40000).toLocaleString()}`,
+        };
+        return {
+          id: m.id,
+          name: m.title,
+          platform: m.platform ? m.platform.replace("_", " ") : "Google Meet",
+          status: m.status === "COMPLETED" ? "synthesized" : m.status === "RECORDING" ? "processing" : "assigned",
+          statusLabel: m.status === "COMPLETED" ? "MOM Synthesized" : m.status === "RECORDING" ? "Live Recording" : "Scheduled",
+          tasks: meta.tasks,
+          owner: meta.owner,
+          impact: meta.impact,
+        };
+      })
     : DEFAULT_TABLE_ROWS;
 
   const filteredRows = searchQuery
@@ -178,15 +218,15 @@ export function OverviewDashboard() {
     : DEFAULT_TOP_MEETINGS;
 
   const displayMeetingsCount = liveMeetings.length > 0
-    ? `${liveMeetings.length} active`
-    : "15,612";
+    ? `${liveMeetings.length}`
+    : "6";
 
   const displayTasksCount = liveTasksCount > 0
     ? liveTasksCount.toLocaleString()
-    : "1,428";
+    : "8";
 
   const displayCrmValue = liveCrmValue > 0
-    ? `$${(liveCrmValue >= 1000 ? `${(liveCrmValue / 1000).toFixed(0)}K` : liveCrmValue.toLocaleString())}`
+    ? `$${(liveCrmValue >= 1000 ? `${Math.round(liveCrmValue / 1000)}K` : liveCrmValue.toLocaleString())}`
     : "$780K";
 
   return (
