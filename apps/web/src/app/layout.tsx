@@ -1,26 +1,11 @@
 import type { Metadata } from "next";
-import { Unbounded, Albert_Sans } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "../components/layout/AppShell";
 
-const unbounded = Unbounded({
-  variable: "--font-unbounded",
-  subsets: ["latin"],
-  display: "swap",
-  weight: ["400", "500", "600", "700", "800"],
-});
-
-const albertSans = Albert_Sans({
-  variable: "--font-albert",
-  subsets: ["latin"],
-  display: "swap",
-  weight: ["400", "500", "600", "700"],
-});
-
 export const metadata: Metadata = {
-  title: "Fulcrum OS — Intelligence & Growth Platform",
+  title: "Kara AI — Autonomous Chief of Staff & Workspace OS",
   description:
-    "Enterprise AI Chief of Staff & Intelligent Workspace: Activation, Growth Telemetry, and AI Agent Sidecar.",
+    "Enterprise AI Chief of Staff & Intelligent Workspace: Real-time meeting ingestion, Deepgram Nova-3 diarization, Groq MOM synthesis, and Twenty CRM sync.",
 };
 
 export default function RootLayout({
@@ -31,9 +16,18 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${unbounded.variable} ${albertSans.variable} h-full antialiased`}
+      data-theme="kara-light"
+      suppressHydrationWarning
+      className="h-full antialiased"
     >
-      <body className="h-full w-full overflow-hidden text-neutral-900 dark:text-neutral-100 selection:bg-[#816797]/30">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("kara-theme-profile");var v=["kara-light","kara-dark","claude","catppuccin","dracula","nord","monokai"];if(t&&v.indexOf(t)>-1){document.documentElement.setAttribute("data-theme",t);if(t==="kara-dark"||t==="dracula"||t==="nord"||t==="monokai")document.documentElement.classList.add("dark")}else{document.documentElement.setAttribute("data-theme","kara-light")}}catch(e){}})()`,
+          }}
+        />
+      </head>
+      <body className="h-full w-full overflow-hidden text-[var(--text-primary)] selection:bg-[var(--accent-primary)]/30">
         <AppShell>{children}</AppShell>
       </body>
     </html>

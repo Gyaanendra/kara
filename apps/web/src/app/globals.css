@@ -1,28 +1,282 @@
+@import url('https://fonts.googleapis.com/css2?family=Albert+Sans:ital,wght@0,100..900;1,100..900&family=Unbounded:wght@200..900&display=swap');
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme inline {
+  /* Semantic token → Tailwind utilities (bg-canvas, bg-card, border-line, text-ink, ...) */
+  --color-canvas: var(--canvas-bg);
+  --color-card: var(--surface-card);
+  --color-subtle: var(--surface-subtle);
+  --color-hovered: var(--surface-hover);
+  --color-line: var(--border-subtle);
+  --color-line-strong: var(--border-active);
+  --color-ink: var(--text-primary);
+  --color-ink-secondary: var(--text-secondary);
+  --color-ink-muted: var(--text-muted);
+  --color-accent: var(--accent-primary);
+  --color-accent-soft: var(--accent-subtle);
+  --color-success: var(--signal-success);
+  --color-warning: var(--signal-warning);
+  --color-error: var(--signal-error);
+  --color-on-accent: var(--on-accent);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+}
+
 @layer base {
   :root {
-    --font-heading: var(--font-unbounded), sans-serif;
-    --font-body: var(--font-albert), sans-serif;
+    --font-unbounded: 'Unbounded', sans-serif;
+    --font-albert: 'Albert Sans', sans-serif;
+    --font-heading: 'Unbounded', sans-serif;
+    --font-body: 'Albert Sans', sans-serif;
 
-    /* Exact 4-Color Palette from Spec */
+    /* Exact 4-Color Palette from Spec (legacy, still referenced by hardcoded views) */
     --color-palette-dark: #1B2430;
     --color-palette-purple: #816797;
     --color-palette-indigo: #51557E;
     --color-palette-sand: #D6D5A8;
     --color-palette-cyan: #A5C9CA;
+
+    /* ------------------------------------------------------------------ */
+    /* Semantic Design Tokens — defaults = Kara Light (profile applied via */
+    /* [data-theme] on <html>; see theme profile blocks below)             */
+    /* ------------------------------------------------------------------ */
+    --canvas-bg: #F8F9FC;
+    --surface-card: #FFFFFF;
+    --surface-subtle: #F1F3F9;
+    --surface-hover: #E7EAF3;
+    --border-subtle: #E2E6F0;
+    --border-active: #C8D0E0;
+    --text-primary: #1B2430;
+    --text-secondary: #51557E;
+    --text-muted: #8E95A5;
+    --accent-primary: #816797;
+    --accent-subtle: #F3EEF8;
+    --on-accent: #FFFFFF;
+    --signal-success: #059669;
+    --signal-warning: #B45309;
+    --signal-error: #DC2626;
+    --chart-1: #816797;
+    --chart-2: #51557E;
+    --chart-3: #A5C9CA;
+    --chart-4: #D6D5A8;
+
+    /* Fluid, adaptive typography (13" laptop → 34" ultrawide) */
+    --font-metric-lg: clamp(1.75rem, 1.25rem + 1.2vw, 2.375rem);
+    --font-header-md: clamp(1.125rem, 0.95rem + 0.6vw, 1.5rem);
+    --font-body-base: clamp(0.8125rem, 0.77rem + 0.15vw, 0.875rem);
+    --font-label-sm: clamp(0.6875rem, 0.65rem + 0.1vw, 0.75rem);
+
+    /* ------------------------------------------------------------------ */
+    /* Motion Design System — Premium & Corporate personality              */
+    /* (decisive, calm, zero bounce)                                       */
+    /* ------------------------------------------------------------------ */
+    --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1); /* entrances, drawers, modals */
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);      /* hovers, tabs, state shifts */
+    --ease-exit: cubic-bezier(0.4, 0, 1, 1);          /* exits, dismissals */
+    --duration-instant: 100ms;
+    --duration-fast: 180ms;
+    --duration-normal: 260ms;
+    --duration-slow: 350ms;
   }
 
   body {
     font-family: var(--font-body);
+    background-color: var(--canvas-bg);
+    color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6, .font-heading {
     font-family: var(--font-heading);
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Theme Profiles Engine — switching swaps only the [data-theme] attribute */
+/* ---------------------------------------------------------------------- */
+
+/* 1. Kara Light (Default) */
+:root,
+[data-theme="kara-light"] {
+  --canvas-bg: #F8F9FC;
+  --surface-card: #FFFFFF;
+  --surface-subtle: #F1F3F9;
+  --surface-hover: #E7EAF3;
+  --border-subtle: #E2E6F0;
+  --border-active: #C8D0E0;
+  --text-primary: #1B2430;
+  --text-secondary: #51557E;
+  --text-muted: #8E95A5;
+  --accent-primary: #816797;
+  --accent-subtle: #F3EEF8;
+  --on-accent: #FFFFFF;
+  --signal-success: #059669;
+  --signal-warning: #B45309;
+  --signal-error: #DC2626;
+  --chart-1: #816797;
+  --chart-2: #51557E;
+  --chart-3: #A5C9CA;
+  --chart-4: #D6D5A8;
+}
+
+/* 2. Kara Dark (Obsidian) */
+[data-theme="kara-dark"] {
+  --canvas-bg: #0B0E14;
+  --surface-card: #131922;
+  --surface-subtle: #1B2430;
+  --surface-hover: #222B38;
+  --border-subtle: #232C3B;
+  --border-active: #38455A;
+  --text-primary: #EDF1F7;
+  --text-secondary: #A5C9CA;
+  --text-muted: #5D6B82;
+  --accent-primary: #A5C9CA;
+  --accent-subtle: #16262B;
+  --on-accent: #0B0E14;
+  --signal-success: #34D399;
+  --signal-warning: #FBBF24;
+  --signal-error: #F87171;
+  --chart-1: #A5C9CA;
+  --chart-2: #51557E;
+  --chart-3: #816797;
+  --chart-4: #D6D5A8;
+}
+
+/* 3. Claude (Warm Ivory & Terracotta) */
+[data-theme="claude"] {
+  --canvas-bg: #FBF9F5;
+  --surface-card: #FFFFFF;
+  --surface-subtle: #F4EFE6;
+  --surface-hover: #EDE5D8;
+  --border-subtle: #E8DFD1;
+  --border-active: #D5C8B4;
+  --text-primary: #2D2926;
+  --text-secondary: #6B635B;
+  --text-muted: #9C9387;
+  --accent-primary: #D97757;
+  --accent-subtle: #FDF1ED;
+  --on-accent: #FFFFFF;
+  --signal-success: #2E7D32;
+  --signal-warning: #92610C;
+  --signal-error: #C2410C;
+  --chart-1: #D97757;
+  --chart-2: #8A8578;
+  --chart-3: #C4B69C;
+  --chart-4: #E9DECE;
+}
+
+/* 4. Catppuccin Latte (Soft Pastel Light) */
+[data-theme="catppuccin"] {
+  --canvas-bg: #EFF1F5;
+  --surface-card: #FFFFFF;
+  --surface-subtle: #E6E9EF;
+  --surface-hover: #DCE0E8;
+  --border-subtle: #CCD0DA;
+  --border-active: #BCC0CC;
+  --text-primary: #4C4F69;
+  --text-secondary: #5C5F77;
+  --text-muted: #8C8FA1;
+  --accent-primary: #8839EF;
+  --accent-subtle: #F2ECFA;
+  --on-accent: #FFFFFF;
+  --signal-success: #40A02B;
+  --signal-warning: #DF8E1D;
+  --signal-error: #D20F39;
+  --chart-1: #8839EF;
+  --chart-2: #04A5E5;
+  --chart-3: #40A02B;
+  --chart-4: #FE640B;
+}
+
+/* 5. Dracula (Vampiric Dark) */
+[data-theme="dracula"] {
+  --canvas-bg: #21222C;
+  --surface-card: #282A36;
+  --surface-subtle: #343746;
+  --surface-hover: #44475A;
+  --border-subtle: #3E4256;
+  --border-active: #6272A4;
+  --text-primary: #F8F8F2;
+  --text-secondary: #BD93F9;
+  --text-muted: #6272A4;
+  --accent-primary: #FF79C6;
+  --accent-subtle: #3D293C;
+  --on-accent: #21222C;
+  --signal-success: #50FA7B;
+  --signal-warning: #F1FA8C;
+  --signal-error: #FF5555;
+  --chart-1: #BD93F9;
+  --chart-2: #FF79C6;
+  --chart-3: #8BE9FD;
+  --chart-4: #F1FA8C;
+}
+
+/* 6. Nord (Arctic Slate & Frost) */
+[data-theme="nord"] {
+  --canvas-bg: #2E3440;
+  --surface-card: #3B4252;
+  --surface-subtle: #434C5E;
+  --surface-hover: #4C566A;
+  --border-subtle: #434C5E;
+  --border-active: #4C566A;
+  --text-primary: #ECEFF4;
+  --text-secondary: #D8DEE9;
+  --text-muted: #7B88A1;
+  --accent-primary: #88C0D0;
+  --accent-subtle: #35424D;
+  --on-accent: #2E3440;
+  --signal-success: #A3BE8C;
+  --signal-warning: #EBCB8B;
+  --signal-error: #BF616A;
+  --chart-1: #88C0D0;
+  --chart-2: #81A1C1;
+  --chart-3: #B48EAD;
+  --chart-4: #EBCB8B;
+}
+
+/* 7. Monokai (High-Contrast Code Editor) */
+[data-theme="monokai"] {
+  --canvas-bg: #1E1F1C;
+  --surface-card: #272822;
+  --surface-subtle: #3E3D32;
+  --surface-hover: #49483E;
+  --border-subtle: #49483E;
+  --border-active: #75715E;
+  --text-primary: #F8F8F2;
+  --text-secondary: #A6E22E;
+  --text-muted: #75715E;
+  --accent-primary: #FD971F;
+  --accent-subtle: #3F3323;
+  --on-accent: #272822;
+  --signal-success: #A6E22E;
+  --signal-warning: #E6DB74;
+  --signal-error: #F92672;
+  --chart-1: #FD971F;
+  --chart-2: #66D9EF;
+  --chart-3: #A6E22E;
+  --chart-4: #F92672;
+}
+
+/* Fluid typography helper classes */
+@layer utilities {
+  .text-metric-lg {
+    font-size: var(--font-metric-lg);
+    line-height: 1.08;
+  }
+  .text-header-md {
+    font-size: var(--font-header-md);
+    line-height: 1.2;
+  }
+  .text-body-base {
+    font-size: var(--font-body-base);
+  }
+  .text-label-sm {
+    font-size: var(--font-label-sm);
   }
 }
 
@@ -34,7 +288,57 @@
   font-family: var(--font-albert), sans-serif;
 }
 
-/* Custom Scrollbars matching palette */
+/* ---------------------------------------------------------------------- */
+/* Motion Design choreography — signature curves & choreographed macros   */
+/* ---------------------------------------------------------------------- */
+
+@keyframes kara-dropdown-pop {
+  0% { opacity: 0; transform: scale(0.95) translateY(8px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes kara-view-transition {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes kara-drawer-slide {
+  0% { opacity: 0; transform: translateX(100%); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes kara-drawer-exit {
+  0% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(100%); }
+}
+
+/* Profile dropdown pop-in (180ms, emphasized) */
+.profile-dropdown-enter {
+  animation: kara-dropdown-pop 180ms var(--ease-emphasized) forwards;
+  transform-origin: bottom left;
+}
+
+/* Workspace ↔ Settings layout morph (260ms, emphasized) */
+.workspace-fade-slide {
+  animation: kara-view-transition 260ms var(--ease-emphasized) forwards;
+}
+
+/* AI Chief drawer slide-in (280ms, emphasized) */
+.drawer-enter {
+  animation: kara-drawer-slide 280ms var(--ease-emphasized) forwards;
+}
+
+/* AI Chief drawer slide-out (200ms, exit curve) */
+.drawer-exit {
+  animation: kara-drawer-exit 200ms var(--ease-exit) forwards;
+}
+
+/* Sliding tab underline */
+.tab-indicator {
+  transition: transform 220ms var(--ease-standard), width 220ms var(--ease-standard);
+}
+
+/* Custom Scrollbars following the active theme */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -45,10 +349,10 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(81, 85, 126, 0.35);
+  background: var(--border-active);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(129, 103, 151, 0.6);
+  background: var(--accent-primary);
 }
