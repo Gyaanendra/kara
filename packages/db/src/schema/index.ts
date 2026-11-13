@@ -24,3 +24,21 @@ export * from "./crm.js";
 
 // AI & Vector — chat_sessions, chat_messages, vector_documents (3)
 export * from "./ai.js";
+
+// Sub-Helper Registry — sub_helpers (1)
+export * from "./helpers.js";
+
+// Directory & Presence — company_members, user_presence (2)
+export * from "./directory.js";
+
+// Knowledge Graph — entity_relationships (1)
+export * from "./knowledge_graph.js";
+
+// Recruitment — job_descriptions, candidates (2)
+export * from "./recruitment.js";
+
+// Documents — document_templates, generated_documents (2)
+export * from "./documents.js";
+
+// Long-Term Memory — user_contexts (1)
+export * from "./user_context.js";

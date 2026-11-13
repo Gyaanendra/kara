@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { getDb, schema, closeDb } from "./index.js";
 import {
   ActionItemStatus,
@@ -33,7 +34,13 @@ export async function seed() {
     .onConflictDoNothing()
     .returning();
 
-  const orgId = org?.id ?? "org_default_seed";
+  let orgId = org?.id;
+  if (!orgId) {
+    const existing = await db.query.organizations.findFirst({
+      where: eq(schema.organizations.slug, "acme-corp"),
+    });
+    orgId = existing?.id ?? "org_default_seed";
+  }
 
   // 2. Users
   const [adminUser] = await db
@@ -47,6 +54,14 @@ export async function seed() {
     .onConflictDoNothing()
     .returning();
 
+  let adminId = adminUser?.id;
+  if (!adminId) {
+    const existing = await db.query.users.findFirst({
+      where: eq(schema.users.email, "alex@acme.corp"),
+    });
+    adminId = existing?.id ?? "usr_admin_seed";
+  }
+
   const [devUser] = await db
     .insert(schema.users)
     .values({
@@ -58,8 +73,13 @@ export async function seed() {
     .onConflictDoNothing()
     .returning();
 
-  const adminId = adminUser?.id ?? "usr_admin_seed";
-  const devId = devUser?.id ?? "usr_dev_seed";
+  let devId = devUser?.id;
+  if (!devId) {
+    const existing = await db.query.users.findFirst({
+      where: eq(schema.users.email, "sarah@acme.corp"),
+    });
+    devId = existing?.id ?? "usr_dev_seed";
+  }
 
   // 3. Org Memberships
   await db
@@ -91,7 +111,13 @@ export async function seed() {
     .onConflictDoNothing()
     .returning();
 
-  const meetingId = meeting?.id ?? "meet_sample_seed";
+  let meetingId = meeting?.id;
+  if (!meetingId) {
+    const existing = await db.query.meetings.findFirst({
+      where: eq(schema.meetings.orgId, orgId),
+    });
+    meetingId = existing?.id ?? "meet_sample_seed";
+  }
 
   // 5. Recording & Transcript
   const [recording] = await db
@@ -321,13 +347,22 @@ export async function seed() {
     .onConflictDoNothing()
     .returning();
 
-  if (dealObject?.id) {
+  let dealObjectId: string | undefined = dealObject?.id;
+  if (!dealObjectId) {
+    const existing = await db.query.crmObjects.findFirst({
+      where: eq(schema.crmObjects.slug, "deals"),
+    });
+    dealObjectId = existing?.id;
+  }
+
+  if (dealObjectId) {
+    const validDealId: string = dealObjectId;
     await db
       .insert(schema.crmFields)
       .values([
         {
           orgId,
-          objectId: dealObject.id,
+          objectId: validDealId,
           name: "Deal Name",
           slug: "name",
           type: CustomFieldType.TEXT,
@@ -336,7 +371,7 @@ export async function seed() {
         },
         {
           orgId,
-          objectId: dealObject.id,
+          objectId: validDealId,
           name: "Amount",
           slug: "amount",
           type: CustomFieldType.NUMBER,
@@ -344,7 +379,7 @@ export async function seed() {
         },
         {
           orgId,
-          objectId: dealObject.id,
+          objectId: validDealId,
           name: "Stage",
           slug: "stage",
           type: CustomFieldType.SELECT,
@@ -363,7 +398,7 @@ export async function seed() {
       .insert(schema.crmRecords)
       .values({
         orgId,
-        objectId: dealObject.id,
+        objectId: validDealId,
         data: {
           name: "Acme Enterprise License",
           amount: 50000,
@@ -373,6 +408,197 @@ export async function seed() {
       })
       .onConflictDoNothing();
   }
+
+  // 11. Built-in Sub-Helpers (Kara AI Task Workers)
+  await db
+    .insert(schema.subHelpers)
+    .values([
+      {
+        orgId,
+        slug: "meeting-researcher",
+        name: "Meeting Intelligence Helper",
+        description: "Searches past meeting transcripts, resolves audio offsets, and extracts verbatim quotes.",
+        systemPromptSlice: "You are Kara's Meeting Research Helper. Retrieve and cite verified transcripts with millisecond precision.",
+        assignedTools: ["searchMeetingsTool", "getUtterancesTool", "audioScrubTool"],
+        model: "llama-3.3-70b-versatile",
+        isBuiltIn: true,
+        isActive: true,
+      },
+      {
+        orgId,
+        slug: "workforce-directory",
+        name: "Workforce & Knowledge Graph Helper",
+        description: "Queries company employee directory, checks presence, and traverses entity relationship triplets.",
+        systemPromptSlice: "You are Kara's Workforce & Directory Helper. Resolve canonical employee names and entity relationship links.",
+        assignedTools: ["directoryLookupTool", "entityGraphTool"],
+        model: "llama-3.3-70b-versatile",
+        isBuiltIn: true,
+        isActive: true,
+      },
+      {
+        orgId,
+        slug: "task-executor",
+        name: "Task & Execution Helper",
+        description: "Extracts action items from MOM, creates Notion-style Kanban tasks, and syncs Twenty CRM records.",
+        systemPromptSlice: "You are Kara's Execution Helper. Ensure action items have valid owners and promote them to project boards.",
+        assignedTools: ["extractActionItemsTool", "kanbanCreateTool", "twentyCrmSyncTool"],
+        model: "llama-3.3-70b-versatile",
+        isBuiltIn: true,
+        isActive: true,
+      },
+      {
+        orgId,
+        slug: "candidate-evaluator",
+        name: "Candidate & GitHub Audit Helper",
+        description: "Parses candidate resumes, scrapes public GitHub repositories, and calculates an objective 100-point score.",
+        systemPromptSlice: "You are Kara's Candidate Evaluator. Apply strict objective metrics: Open Source (35), Projects (30), Production (25), Skills (10).",
+        assignedTools: ["resumeParserTool", "githubScraperTool", "objectiveScoringTool"],
+        model: "llama-3.3-70b-versatile",
+        isBuiltIn: true,
+        isActive: true,
+      },
+      {
+        orgId,
+        slug: "document-generator",
+        name: "Document Drafting Helper",
+        description: "Fills template variables for offer letters, SLAs, and briefs.",
+        systemPromptSlice: "You are Kara's Document Drafting Helper. Generate clean, legally consistent Markdown documents from templates.",
+        assignedTools: ["templateLoaderTool", "documentRendererTool"],
+        model: "llama-3.3-70b-versatile",
+        isBuiltIn: true,
+        isActive: true,
+      },
+    ])
+    .onConflictDoNothing();
+
+  // 12. Company Directory (Canonical Employee List)
+  await db
+    .insert(schema.companyMembers)
+    .values([
+      {
+        orgId,
+        name: "Alex Rivera",
+        email: "alex@acme.corp",
+        jobTitle: "Head of Product",
+        department: "Executive",
+        bio: "Oversees executive strategy and product roadmap across the monorepo.",
+        isAdmin: true,
+        isActive: true,
+      },
+      {
+        orgId,
+        name: "Sarah Chen",
+        email: "sarah@acme.corp",
+        jobTitle: "Principal Distributed Architect",
+        department: "Engineering",
+        bio: "Specializes in PostgreSQL 18, high-throughput speech pipelines, and Mastra AI workflows.",
+        isAdmin: false,
+        isActive: true,
+      },
+      {
+        orgId,
+        name: "Maya Patel",
+        email: "maya@acme.corp",
+        jobTitle: "Enterprise Account Director",
+        department: "Revenue",
+        bio: "Leads enterprise customer engagements and commercial contracts.",
+        isAdmin: false,
+        isActive: true,
+      },
+    ])
+    .onConflictDoNothing();
+
+  // 13. Entity Relationships (Knowledge Graph Triplets)
+  await db
+    .insert(schema.entityRelationships)
+    .values([
+      {
+        orgId,
+        entityA: "Sarah Chen",
+        relation: "OWNS_DATABASE_MIGRATION",
+        entityB: "PostgreSQL 18",
+        context: "Decided in Q3 Architecture & Roadmap Sync at 00:46.",
+        meetingId,
+        confidence: 1.0,
+      },
+      {
+        orgId,
+        entityA: "Alex Rivera",
+        relation: "APPROVED_ROADMAP",
+        entityB: "Kara AI Monorepo",
+        context: "Confirmed sub-35ms reflex target during standup.",
+        meetingId,
+        confidence: 0.95,
+      },
+    ])
+    .onConflictDoNothing();
+
+  // 14. Document Templates
+  await db
+    .insert(schema.documentTemplates)
+    .values([
+      {
+        orgId,
+        name: "Senior Software Engineer Offer Letter",
+        type: "offer_letter",
+        content: "# Offer of Employment\n\nDear {{candidate_name}},\n\nAcme Corporation is pleased to offer you the position of **{{position}}** in our {{department}} team, reporting to {{manager_name}}.\n\n### Compensation\n- Base Salary: {{salary}}\n- Equity Grant: {{equity}}\n- Start Date: {{start_date}}\n\nPlease sign below to accept.",
+        variables: ["candidate_name", "position", "department", "manager_name", "salary", "equity", "start_date"],
+      },
+    ])
+    .onConflictDoNothing();
+
+  // 15. Job Descriptions & Scored Candidates
+  const [job] = await db
+    .insert(schema.jobDescriptions)
+    .values({
+      orgId,
+      title: "Senior Distributed Systems Engineer",
+      department: "Engineering",
+      description: "Own the real-time audio pipeline and Mastra AI agent framework.",
+      requirements: "5+ years TypeScript, PostgreSQL, WebSockets, LLM agent orchestration.",
+      salaryRange: "$160,000 - $190,000",
+      status: "active",
+    })
+    .onConflictDoNothing()
+    .returning();
+
+  if (job?.id) {
+    await db
+      .insert(schema.candidates)
+      .values({
+        orgId,
+        jobId: job.id,
+        fullName: "Prakhar Sharma",
+        email: "prakhar@example.com",
+        githubUrl: "https://github.com/prakhar-sharma",
+        overallScore: 92.5,
+        openSourceScore: 34.0,
+        selfProjectsScore: 28.5,
+        productionScore: 22.0,
+        technicalSkillsScore: 8.0,
+        aiSummary: "Exceptional systems developer with strong track record in open source audio ingestion and distributed event queues.",
+        aiPros: ["Major contributor to high-throughput streaming repositories", "Production experience with PostgreSQL 18 & pgvector"],
+        aiCons: ["Limited public Kubernetes deployment manifests"],
+        aiJustification: "Strong GitHub footprint with genuine commit velocity across audio streaming libraries.",
+        status: "screening",
+      })
+      .onConflictDoNothing();
+  }
+
+  // 16. User Long-Term Memory (Context)
+  await db
+    .insert(schema.userContexts)
+    .values({
+      orgId,
+      userId: adminId,
+      contextType: "preferences",
+      contextData: {
+        themeProfile: "kara-light",
+        focusAreas: ["PostgreSQL 18 MVCC", "Sub-35ms Diarization", "Twenty CRM Bi-directional Sync"],
+        briefingFrequency: "daily",
+      },
+    })
+    .onConflictDoNothing();
 
   console.log("Database seeded successfully with PostgreSQL 18 sample data!");
   await closeDb();
