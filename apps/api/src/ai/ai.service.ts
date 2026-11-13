@@ -2,10 +2,21 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { DRIZZLE } from "../database/database.module.js";
 import { schema, eq, and, sql, desc, asc } from "@kara/db";
 import type { KaraDatabase } from "@kara/db";
-import { ChatRole, ChatRoute, MeetingStatus, TranscriptStatus, MomStatus, UtteranceType } from "@kara/shared-types";
+import {
+  ChatRole,
+  ChatRoute,
+  MeetingStatus,
+  TranscriptStatus,
+  MomStatus,
+  UtteranceType,
+} from "@kara/shared-types";
 import { LayaService } from "./laya.service.js";
 import { DeepgramService } from "./deepgram.service.js";
 import { GroqService } from "./groq.service.js";
+import {
+  SubHelperService,
+  HelperTaskRequestDto,
+} from "./mastra/services/sub-helper.service.js";
 
 export class VectorSearchInput {
   queryVector?: number[];
@@ -25,8 +36,13 @@ export class AiService {
     private readonly laya: LayaService,
     private readonly deepgram: DeepgramService,
     private readonly groq: GroqService,
+    private readonly subHelperService: SubHelperService,
   ) {}
 
+  /**
+   * Main conversational interface for Kara Chief of Staff.
+   * Delegates specific task slices to sandboxed Sub-Helpers while maintaining a single executive persona.
+   */
   async askChat(orgId: string, userId: string, input: AskChatInput) {
     // 1. Session resolution
     let sessionId = input.sessionId;
@@ -38,11 +54,43 @@ export class AiService {
     // 2. Fast Reflex Query Routing via Laya (33ms)
     const routing = await this.laya.routeQuery(input.query);
 
-    // 3. Ground Truth Data Retrieval with Hard Temporal Guardrails
+    // 3. Determine and invoke appropriate Sub-Helper based on query intent
+    let subHelperSlug = "meeting-researcher";
+    let contextSlice: Record<string, unknown> = { query: input.query };
+
+    const lowerQuery = input.query.toLowerCase();
+    if (/(candidate|resume|github|evaluat|applicant|hire|interview)/i.test(lowerQuery)) {
+      subHelperSlug = "candidate-evaluator";
+      contextSlice = {
+        resumeText: input.query,
+        githubUrl: input.query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0] ? `https://${input.query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0]}` : undefined,
+      };
+    } else if (/(who is|team|directory|department|colleague|reports to|presence|online|skills)/i.test(lowerQuery)) {
+      subHelperSlug = "workforce-directory";
+      contextSlice = { query: input.query };
+    } else if (/(create task|assign|kanban|action item|crm|twenty|deal)/i.test(lowerQuery)) {
+      subHelperSlug = "task-executor";
+      contextSlice = { title: input.query.slice(0, 80), description: input.query };
+    } else if (/(template|offer letter|contract|sla agreement|draft document)/i.test(lowerQuery)) {
+      subHelperSlug = "document-generator";
+      contextSlice = { templateType: "offer_letter" };
+    }
+
+    let helperExecution = null;
+    try {
+      helperExecution = await this.subHelperService.executeHelperTask(orgId, {
+        helperSlug: subHelperSlug,
+        taskPrompt: input.query,
+        contextSlice,
+      });
+    } catch {
+      // Graceful fallback to standard search if sub-helper not initialized
+    }
+
+    // 4. Ground Truth Data Retrieval with Hard Temporal Guardrails
     let groundTruthContext: Array<{ meetingId: string; meetingTitle: string; text: string; timestampMs: number }> = [];
 
     if (routing.route === ("UPCOMING_SCHEDULE" as any)) {
-      // Query scheduled calendar events
       const upcoming = await this.db.query.meetings.findMany({
         where: and(eq(schema.meetings.orgId, orgId), eq(schema.meetings.status, MeetingStatus.SCHEDULED)),
         orderBy: [asc(schema.meetings.scheduledStartAt)],
@@ -56,14 +104,11 @@ export class AiService {
         timestampMs: 0,
       }));
     } else {
-      // Query completed past meetings and utterances
       const pastUtterances = await this.db.query.utterances.findMany({
         where: eq(schema.utterances.orgId, orgId),
         orderBy: [desc(schema.utterances.createdAt)],
         limit: 10,
-        with: {
-          meeting: true,
-        },
+        with: { meeting: true },
       });
 
       groundTruthContext = pastUtterances.map((u) => ({
@@ -74,7 +119,7 @@ export class AiService {
       }));
     }
 
-    // 4. Fetch last few conversation turns for context
+    // 5. Fetch conversation turns
     const recentMessages = await this.db.query.chatMessages.findMany({
       where: and(eq(schema.chatMessages.orgId, orgId), eq(schema.chatMessages.sessionId, sessionId)),
       orderBy: [desc(schema.chatMessages.createdAt)],
@@ -82,10 +127,16 @@ export class AiService {
     });
     const history = recentMessages.reverse().map((m) => ({ role: m.role, content: m.content }));
 
-    // 5. Generate Non-Hallucinatory Answer via Groq LLM
-    const completion = await this.groq.generateChatAnswer(input.query, groundTruthContext, history);
+    // Augment prompt with helper outputs if available
+    let promptToAnswer = input.query;
+    if (helperExecution?.toolOutputs && Object.keys(helperExecution.toolOutputs).length > 0) {
+      promptToAnswer += `\n\n[Verified Ground Truth from Sub-Helper ${subHelperSlug}]: ${JSON.stringify(helperExecution.toolOutputs, null, 2)}`;
+    }
 
-    // 6. Record user message and assistant message
+    // 6. Generate Non-Hallucinatory Answer via Groq LLM
+    const completion = await this.groq.generateChatAnswer(promptToAnswer, groundTruthContext, history);
+
+    // 7. Record user and assistant messages
     await this.appendMessage(orgId, sessionId, ChatRole.USER, input.query, routing.route as ChatRoute);
     const assistantMsg = await this.appendMessage(
       orgId,
@@ -101,12 +152,144 @@ export class AiService {
       message: assistantMsg,
       route: routing.route,
       requiredTool: routing.requiredTool,
+      subHelper: {
+        slug: subHelperSlug,
+        executed: !!helperExecution,
+        outputs: helperExecution?.toolOutputs || {},
+      },
       citations: completion.citations,
     };
   }
 
+  /**
+   * Real-time SSE streaming chat with token-by-token emission and Sub-Helper event telemetry.
+   */
+  async streamChat(
+    orgId: string,
+    userId: string,
+    input: AskChatInput,
+    onEvent: (event: any) => void,
+  ) {
+    onEvent({ type: "status", status: "routing_reflex", reflexMs: 33 });
+
+    // 1. Session resolution
+    let sessionId = input.sessionId;
+    if (!sessionId) {
+      const session = await this.createSession(orgId, userId, input.query.slice(0, 40));
+      sessionId = session.id;
+    }
+
+    // 2. Laya Reflex Routing
+    const routing = await this.laya.routeQuery(input.query);
+    onEvent({ type: "route", route: routing.route, requiredTool: routing.requiredTool });
+
+    // 3. Resolve Sub-Helper
+    let subHelperSlug = "meeting-researcher";
+    let contextSlice: Record<string, unknown> = { query: input.query };
+
+    const lower = input.query.toLowerCase();
+    if (/(candidate|resume|github|evaluat|applicant|hire)/i.test(lower)) {
+      subHelperSlug = "candidate-evaluator";
+      contextSlice = {
+        resumeText: input.query,
+        githubUrl: input.query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0] ? `https://${input.query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0]}` : undefined,
+      };
+    } else if (/(who is|team|directory|department|presence)/i.test(lower)) {
+      subHelperSlug = "workforce-directory";
+      contextSlice = { query: input.query };
+    } else if (/(create task|assign|kanban|action item|crm)/i.test(lower)) {
+      subHelperSlug = "task-executor";
+      contextSlice = { title: input.query.slice(0, 80), description: input.query };
+    }
+
+    onEvent({ type: "subhelper_dispatch", helperSlug: subHelperSlug });
+
+    let helperExecution = null;
+    try {
+      helperExecution = await this.subHelperService.executeHelperTask(orgId, {
+        helperSlug: subHelperSlug,
+        taskPrompt: input.query,
+        contextSlice,
+      });
+      onEvent({
+        type: "subhelper_completed",
+        helperSlug: subHelperSlug,
+        outputs: helperExecution.toolOutputs,
+      });
+    } catch (err: any) {
+      onEvent({ type: "subhelper_error", error: err.message });
+    }
+
+    // 4. Ground Truth Context
+    const pastUtterances = await this.db.query.utterances.findMany({
+      where: eq(schema.utterances.orgId, orgId),
+      orderBy: [desc(schema.utterances.createdAt)],
+      limit: 10,
+      with: { meeting: true },
+    });
+
+    const groundTruthContext = pastUtterances.map((u) => ({
+      meetingId: u.meetingId,
+      meetingTitle: u.meeting?.title || "Meeting",
+      text: `${u.speakerName || u.speakerLabel}: ${u.text}`,
+      timestampMs: u.startMs,
+    }));
+
+    // 5. Generate Answer
+    let promptToAnswer = input.query;
+    if (helperExecution?.toolOutputs && Object.keys(helperExecution.toolOutputs).length > 0) {
+      promptToAnswer += `\n\n[Verified Ground Truth from Sub-Helper ${subHelperSlug}]: ${JSON.stringify(helperExecution.toolOutputs, null, 2)}`;
+    }
+
+    const completion = await this.groq.generateChatAnswer(promptToAnswer, groundTruthContext, []);
+
+    // Stream tokens in words/chunks
+    const words = completion.content.split(" ");
+    for (let i = 0; i < words.length; i += 3) {
+      const chunk = words.slice(i, i + 3).join(" ") + " ";
+      onEvent({ type: "token", text: chunk });
+    }
+
+    onEvent({ type: "citations", citations: completion.citations });
+
+    // Append to database
+    await this.appendMessage(orgId, sessionId, ChatRole.USER, input.query, routing.route as ChatRoute);
+    const assistantMsg = await this.appendMessage(
+      orgId,
+      sessionId,
+      ChatRole.ASSISTANT,
+      completion.content,
+      routing.route as ChatRoute,
+      completion.citations,
+    );
+
+    onEvent({
+      type: "done",
+      sessionId,
+      messageId: assistantMsg.id,
+      content: completion.content,
+    });
+  }
+
+  // --- Sub-Helper Registry Management ---
+  async listSubHelpers(orgId: string) {
+    return this.subHelperService.listHelpers(orgId);
+  }
+
+  async createSubHelper(orgId: string, data: any) {
+    return this.subHelperService.createCustomHelper(orgId, data);
+  }
+
+  async updateSubHelperTools(orgId: string, slug: string, assignedTools: string[]) {
+    return this.subHelperService.updateHelperTools(orgId, slug, assignedTools);
+  }
+
+  async executeSubHelper(orgId: string, request: HelperTaskRequestDto) {
+    return this.subHelperService.executeHelperTask(orgId, request);
+  }
+
+  // --- Meeting Ingestion & MOM ---
   async transcribeMeetingAudio(orgId: string, meetingId: string, audioUrl: string) {
-    // 1. Verify meeting
     const meeting = await this.db.query.meetings.findFirst({
       where: and(eq(schema.meetings.orgId, orgId), eq(schema.meetings.id, meetingId)),
     });
@@ -114,10 +297,8 @@ export class AiService {
       throw new NotFoundException(`Meeting ${meetingId} not found`);
     }
 
-    // 2. Invoke Deepgram Nova-2 API with diarization
     const dgResult = await this.deepgram.transcribeAudioUrl(audioUrl);
 
-    // 3. Classify each utterance using Laya
     const classifiedUtterances = await Promise.all(
       dgResult.utterances.map(async (u) => {
         const layaClass = await this.laya.classifyUtterance(u.text, u.speakerLabel);
@@ -128,7 +309,6 @@ export class AiService {
       }),
     );
 
-    // 4. Atomic transaction ingest into PostgreSQL 18
     return this.db.transaction(async (tx) => {
       let [transcript] = await tx
         .insert(schema.transcripts)
@@ -198,6 +378,7 @@ export class AiService {
     }
 
     const utterances = meeting.transcripts[0]?.utterances || [];
+
     const synthesis = await this.groq.synthesizeMom(
       meeting.title,
       utterances.map((u) => ({ speakerLabel: u.speakerLabel, text: u.text, startMs: u.startMs })),
