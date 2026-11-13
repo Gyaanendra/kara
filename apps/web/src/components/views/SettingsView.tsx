@@ -25,8 +25,10 @@ import {
   Server,
   FileText,
   BadgeCheck,
+  Layers,
 } from "lucide-react";
 import { useWorkspaceStore, THEME_PROFILES, type SettingsTab } from "../../lib/store";
+import { fetchApi } from "../../lib/api";
 
 const FONT_SCALE_KEY = "kara-font-scale";
 
@@ -142,6 +144,16 @@ export function SettingsView() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [setSettingsOpen]);
+
+  // Load registered Sub-Helpers from PostgreSQL API
+  const [subHelpers, setSubHelpers] = useState<any[]>([]);
+  useEffect(() => {
+    fetchApi<any[]>("/ai/sub-helpers")
+      .then((res) => {
+        if (Array.isArray(res) && res.length > 0) setSubHelpers(res);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="h-full flex bg-canvas text-ink">
@@ -417,6 +429,66 @@ export function SettingsView() {
                   <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-accent-soft text-accent border border-accent/30">
                     Active
                   </span>
+                </div>
+              </Card>
+
+              <Card
+                title="Dynamic Sub-Helper Registry"
+                subtitle="Modular task-slice workers with sandboxed tool bundles in PostgreSQL 18."
+              >
+                <div className="space-y-2">
+                  {(subHelpers.length > 0
+                    ? subHelpers
+                    : [
+                        {
+                          slug: "meeting-researcher",
+                          name: "Meeting Intelligence Helper",
+                          assignedTools: ["searchMeetingsTool", "getUtterancesTool", "audioScrubTool"],
+                        },
+                        {
+                          slug: "workforce-directory",
+                          name: "Workforce & Knowledge Graph Helper",
+                          assignedTools: ["directoryLookupTool", "entityGraphTool"],
+                        },
+                        {
+                          slug: "task-executor",
+                          name: "Task & Execution Helper",
+                          assignedTools: ["extractActionItemsTool", "kanbanCreateTool", "twentyCrmSyncTool"],
+                        },
+                        {
+                          slug: "candidate-evaluator",
+                          name: "Candidate & GitHub Audit Helper",
+                          assignedTools: ["resumeParserTool", "githubScraperTool", "objectiveScoringTool"],
+                        },
+                        {
+                          slug: "document-generator",
+                          name: "Document Drafting Helper",
+                          assignedTools: ["templateLoaderTool", "documentRendererTool"],
+                        },
+                      ]
+                  ).map((helper) => (
+                    <div
+                      key={helper.slug}
+                      className="p-2.5 rounded-lg bg-subtle border border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-albert text-xs font-semibold text-ink">
+                            {helper.name}
+                          </span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-accent-soft text-accent border border-accent/20">
+                            {helper.slug}
+                          </span>
+                        </div>
+                        <p className="text-[10px] font-mono text-ink-muted mt-0.5">
+                          Tools: {(helper.assignedTools || []).join(", ")}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-success/10 text-success border border-success/20 self-start sm:self-auto">
+                        Active
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </Card>
             </>

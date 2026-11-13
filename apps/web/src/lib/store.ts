@@ -9,6 +9,7 @@ import {
   Code2,
   type LucideIcon,
 } from "lucide-react";
+import { fetchApi } from "./api";
 
 export type NavModule =
   | "overview"
@@ -126,11 +127,26 @@ export function readStoredThemeProfile(): ThemeProfile {
     : DEFAULT_THEME_PROFILE;
 }
 
+export interface ChatCitation {
+  meetingId: string;
+  meetingTitle: string;
+  timestampMs: number;
+  quote: string;
+}
+
 export interface ChatMessage {
   id: string;
   sender: "user" | "agent";
   text: string;
   timestamp: string;
+  route?: string;
+  citations?: ChatCitation[];
+  subHelper?: {
+    slug: string;
+    executed: boolean;
+    outputs?: Record<string, any>;
+  };
+  isLoading?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -151,6 +167,7 @@ interface WorkspaceState {
   isAgentOpen: boolean;
   isSidebarOpen: boolean;
   isSettingsOpen: boolean;
+  isChatLoading: boolean;
   activeSettingsTab: SettingsTab;
   activeNav: string;
   activeModule: NavModule;
@@ -176,15 +193,17 @@ interface WorkspaceState {
   setChartMetric: (metric: "total" | "impact") => void;
   setTimeView: (view: "daily" | "weekly" | "monthly") => void;
   sendChatMessage: (text: string) => void;
+  sendLiveChatMessage: (text: string) => Promise<void>;
 }
 
-export const useWorkspaceStore = create<WorkspaceState>((set) => ({
+export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   theme: "light",
   themeProfile: DEFAULT_THEME_PROFILE,
   isThemeSettingsOpen: false,
   isAgentOpen: true,
   isSidebarOpen: true,
   isSettingsOpen: false,
+  isChatLoading: false,
   activeSettingsTab: "appearance",
   activeNav: "goals",
   activeModule: "overview",
@@ -195,9 +214,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   timeView: "monthly",
   chatMessages: [
     {
-      id: "msg-1",
+      id: "msg-welcome",
       sender: "agent",
-      text: "Good morning, Alex! You can ask me anything about Kara AI. Meeting intelligence currently covers 15,612 ingested sessions with 1,428 action items in flight.",
+      text: "Good morning, Alex! I am Kara AI, your Autonomous Chief of Staff. I operate under strict non-hallucinatory guardrails across verified PostgreSQL 18 meeting transcripts, Notion Kanban tasks, and Twenty CRM records. Ask me anything or dispatch a task.",
       timestamp: "9:00 AM",
     },
   ],
@@ -239,28 +258,82 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setChartMetric: (chartMetric) => set({ chartMetric }),
   setTimeView: (timeView) => set({ timeView }),
-  sendChatMessage: (text) =>
+
+  sendChatMessage: (text) => {
+    get().sendLiveChatMessage(text);
+  },
+
+  sendLiveChatMessage: async (text: string) => {
+    const userMsgId = `usr-${Date.now()}`;
+    const agentMsgId = `agt-${Date.now() + 1}`;
+    const timeStr = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // 1. Add user message and pending agent placeholder
     set((state) => ({
+      isChatLoading: true,
       chatMessages: [
         ...state.chatMessages,
         {
-          id: `msg-${Date.now()}`,
+          id: userMsgId,
           sender: "user",
           text,
-          timestamp: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
+          timestamp: timeStr,
         },
         {
-          id: `msg-${Date.now() + 1}`,
+          id: agentMsgId,
           sender: "agent",
-          text: `Analyzing "${text}" across 15,612 ingested meetings, 1,428 action items, and $780K tracked CRM value...`,
-          timestamp: new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
+          text: "Consulting ground-truth meeting transcripts and executing Sub-Helpers...",
+          timestamp: timeStr,
+          isLoading: true,
         },
       ],
-    })),
+    }));
+
+    try {
+      // 2. Call live API endpoint
+      const response = await fetchApi<any>("/ai/chat/ask", {
+        method: "POST",
+        body: JSON.stringify({ query: text }),
+      });
+
+      const replyContent =
+        response.message?.content ||
+        response.content ||
+        "Processed request successfully.";
+
+      // 3. Update agent placeholder with actual response
+      set((state) => ({
+        isChatLoading: false,
+        chatMessages: state.chatMessages.map((m) =>
+          m.id === agentMsgId
+            ? {
+                ...m,
+                text: replyContent,
+                route: response.route,
+                citations: response.citations || [],
+                subHelper: response.subHelper,
+                isLoading: false,
+              }
+            : m,
+        ),
+      }));
+    } catch (err: any) {
+      console.error("[Kara AI Chat API Error]:", err);
+      set((state) => ({
+        isChatLoading: false,
+        chatMessages: state.chatMessages.map((m) =>
+          m.id === agentMsgId
+            ? {
+                ...m,
+                text: `Kara AI Chief encountered an error connecting to local API (http://localhost:4000/api): ${err.message}. Please ensure the backend NestJS service is running with 'pnpm --filter api start:dev'.`,
+                isLoading: false,
+              }
+            : m,
+        ),
+      }));
+    }
+  },
 }));
