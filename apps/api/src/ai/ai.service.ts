@@ -44,33 +44,35 @@ export class AiService {
    * Delegates specific task slices to sandboxed Sub-Helpers while maintaining a single executive persona.
    */
   async askChat(orgId: string, userId: string, input: AskChatInput) {
+    const query = input.query || (input as any).question || "";
+
     // 1. Session resolution
     let sessionId = input.sessionId;
     if (!sessionId) {
-      const session = await this.createSession(orgId, userId, input.query.slice(0, 40));
+      const session = await this.createSession(orgId, userId, query.slice(0, 40) || "Conversation");
       sessionId = session.id;
     }
 
     // 2. Fast Reflex Query Routing via Laya (33ms)
-    const routing = await this.laya.routeQuery(input.query);
+    const routing = await this.laya.routeQuery(query);
 
     // 3. Determine and invoke appropriate Sub-Helper based on query intent
     let subHelperSlug = "meeting-researcher";
-    let contextSlice: Record<string, unknown> = { query: input.query };
+    let contextSlice: Record<string, unknown> = { query };
 
-    const lowerQuery = input.query.toLowerCase();
+    const lowerQuery = query.toLowerCase();
     if (/(candidate|resume|github|evaluat|applicant|hire|interview)/i.test(lowerQuery)) {
       subHelperSlug = "candidate-evaluator";
       contextSlice = {
-        resumeText: input.query,
-        githubUrl: input.query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0] ? `https://${input.query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0]}` : undefined,
+        resumeText: query,
+        githubUrl: query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0] ? `https://${query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0]}` : undefined,
       };
     } else if (/(who is|team|directory|department|colleague|reports to|presence|online|skills)/i.test(lowerQuery)) {
       subHelperSlug = "workforce-directory";
-      contextSlice = { query: input.query };
+      contextSlice = { query };
     } else if (/(create task|assign|kanban|action item|crm|twenty|deal)/i.test(lowerQuery)) {
       subHelperSlug = "task-executor";
-      contextSlice = { title: input.query.slice(0, 80), description: input.query };
+      contextSlice = { title: query.slice(0, 80), description: query };
     } else if (/(template|offer letter|contract|sla agreement|draft document)/i.test(lowerQuery)) {
       subHelperSlug = "document-generator";
       contextSlice = { templateType: "offer_letter" };
@@ -80,7 +82,7 @@ export class AiService {
     try {
       helperExecution = await this.subHelperService.executeHelperTask(orgId, {
         helperSlug: subHelperSlug,
-        taskPrompt: input.query,
+        taskPrompt: query,
         contextSlice,
       });
     } catch {
@@ -107,7 +109,7 @@ export class AiService {
       const pastUtterances = await this.db.query.utterances.findMany({
         where: eq(schema.utterances.orgId, orgId),
         orderBy: [desc(schema.utterances.createdAt)],
-        limit: 10,
+        limit: 50,
         with: { meeting: true },
       });
 
@@ -128,7 +130,7 @@ export class AiService {
     const history = recentMessages.reverse().map((m) => ({ role: m.role, content: m.content }));
 
     // Augment prompt with helper outputs if available
-    let promptToAnswer = input.query;
+    let promptToAnswer = query;
     if (helperExecution?.toolOutputs && Object.keys(helperExecution.toolOutputs).length > 0) {
       promptToAnswer += `\n\n[Verified Ground Truth from Sub-Helper ${subHelperSlug}]: ${JSON.stringify(helperExecution.toolOutputs, null, 2)}`;
     }
@@ -137,7 +139,7 @@ export class AiService {
     const completion = await this.groq.generateChatAnswer(promptToAnswer, groundTruthContext, history);
 
     // 7. Record user and assistant messages
-    await this.appendMessage(orgId, sessionId, ChatRole.USER, input.query, routing.route as ChatRoute);
+    await this.appendMessage(orgId, sessionId, ChatRole.USER, query, routing.route as ChatRoute);
     const assistantMsg = await this.appendMessage(
       orgId,
       sessionId,
@@ -170,36 +172,37 @@ export class AiService {
     input: AskChatInput,
     onEvent: (event: any) => void,
   ) {
+    const query = input.query || (input as any).question || "";
     onEvent({ type: "status", status: "routing_reflex", reflexMs: 33 });
 
     // 1. Session resolution
     let sessionId = input.sessionId;
     if (!sessionId) {
-      const session = await this.createSession(orgId, userId, input.query.slice(0, 40));
+      const session = await this.createSession(orgId, userId, query.slice(0, 40) || "Conversation");
       sessionId = session.id;
     }
 
     // 2. Laya Reflex Routing
-    const routing = await this.laya.routeQuery(input.query);
+    const routing = await this.laya.routeQuery(query);
     onEvent({ type: "route", route: routing.route, requiredTool: routing.requiredTool });
 
     // 3. Resolve Sub-Helper
     let subHelperSlug = "meeting-researcher";
-    let contextSlice: Record<string, unknown> = { query: input.query };
+    let contextSlice: Record<string, unknown> = { query };
 
-    const lower = input.query.toLowerCase();
+    const lower = query.toLowerCase();
     if (/(candidate|resume|github|evaluat|applicant|hire)/i.test(lower)) {
       subHelperSlug = "candidate-evaluator";
       contextSlice = {
-        resumeText: input.query,
-        githubUrl: input.query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0] ? `https://${input.query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0]}` : undefined,
+        resumeText: query,
+        githubUrl: query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0] ? `https://${query.match(/github\.com\/[a-zA-Z0-9_-]+/)?.[0]}` : undefined,
       };
     } else if (/(who is|team|directory|department|presence)/i.test(lower)) {
       subHelperSlug = "workforce-directory";
-      contextSlice = { query: input.query };
+      contextSlice = { query };
     } else if (/(create task|assign|kanban|action item|crm)/i.test(lower)) {
       subHelperSlug = "task-executor";
-      contextSlice = { title: input.query.slice(0, 80), description: input.query };
+      contextSlice = { title: query.slice(0, 80), description: query };
     }
 
     onEvent({ type: "subhelper_dispatch", helperSlug: subHelperSlug });
@@ -208,7 +211,7 @@ export class AiService {
     try {
       helperExecution = await this.subHelperService.executeHelperTask(orgId, {
         helperSlug: subHelperSlug,
-        taskPrompt: input.query,
+        taskPrompt: query,
         contextSlice,
       });
       onEvent({
@@ -224,7 +227,7 @@ export class AiService {
     const pastUtterances = await this.db.query.utterances.findMany({
       where: eq(schema.utterances.orgId, orgId),
       orderBy: [desc(schema.utterances.createdAt)],
-      limit: 10,
+      limit: 50,
       with: { meeting: true },
     });
 
@@ -236,7 +239,7 @@ export class AiService {
     }));
 
     // 5. Generate Answer
-    let promptToAnswer = input.query;
+    let promptToAnswer = query;
     if (helperExecution?.toolOutputs && Object.keys(helperExecution.toolOutputs).length > 0) {
       promptToAnswer += `\n\n[Verified Ground Truth from Sub-Helper ${subHelperSlug}]: ${JSON.stringify(helperExecution.toolOutputs, null, 2)}`;
     }
@@ -253,7 +256,7 @@ export class AiService {
     onEvent({ type: "citations", citations: completion.citations });
 
     // Append to database
-    await this.appendMessage(orgId, sessionId, ChatRole.USER, input.query, routing.route as ChatRoute);
+    await this.appendMessage(orgId, sessionId, ChatRole.USER, query, routing.route as ChatRoute);
     const assistantMsg = await this.appendMessage(
       orgId,
       sessionId,

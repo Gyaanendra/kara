@@ -11,21 +11,22 @@ export const searchMeetingsTool = createTool({
     status: z.enum(["SCHEDULED", "BOT_JOINING", "RECORDING", "PROCESSING", "COMPLETED", "FAILED"]).optional(),
     limit: z.number().default(5).describe("Max meetings to return"),
   }),
-  execute: async ({ context }) => {
+  execute: async (input: any) => {
+    const params = input?.context || input || {};
     const db = getDb();
-    const conditions = [eq(schema.meetings.orgId, context.orgId)];
+    const conditions = [eq(schema.meetings.orgId, params.orgId)];
 
-    if (context.status) {
-      conditions.push(eq(schema.meetings.status, context.status as any));
+    if (params.status) {
+      conditions.push(eq(schema.meetings.status, params.status as any));
     }
-    if (context.query) {
-      conditions.push(ilike(schema.meetings.title, `%${context.query}%`));
+    if (params.query) {
+      conditions.push(ilike(schema.meetings.title, `%${params.query}%`));
     }
 
     const rows = await db.query.meetings.findMany({
       where: and(...conditions),
       orderBy: [desc(schema.meetings.scheduledStartAt)],
-      limit: context.limit || 5,
+      limit: params.limit || 5,
     });
 
     return {
@@ -49,16 +50,17 @@ export const getUtterancesTool = createTool({
     meetingId: z.string().describe("ID of the meeting to fetch utterances for"),
     limit: z.number().default(20),
   }),
-  execute: async ({ context }) => {
+  execute: async (input: any) => {
+    const params = input?.context || input || {};
     const db = getDb();
     const rows = await db.query.utterances.findMany({
-      where: eq(schema.utterances.meetingId, context.meetingId),
+      where: eq(schema.utterances.meetingId, params.meetingId),
       orderBy: [schema.utterances.startMs],
-      limit: context.limit || 20,
+      limit: params.limit || 20,
     });
 
     return {
-      meetingId: context.meetingId,
+      meetingId: params.meetingId,
       count: rows.length,
       utterances: rows.map((u) => ({
         id: u.id,
@@ -66,7 +68,7 @@ export const getUtterancesTool = createTool({
         startMs: u.startMs,
         endMs: u.endMs,
         text: u.text,
-        type: u.utteranceType,
+        type: u.type,
       })),
     };
   },
@@ -81,18 +83,19 @@ export const audioScrubTool = createTool({
     speaker: z.string().optional(),
     quote: z.string(),
   }),
-  execute: async ({ context }) => {
-    const totalSec = Math.floor(context.timestampMs / 1000);
+  execute: async (input: any) => {
+    const params = input?.context || input || {};
+    const totalSec = Math.floor(params.timestampMs / 1000);
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
     const timeFormatted = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 
     return {
-      citation: `[${context.meetingTitle} @ ${timeFormatted}]`,
-      timestampMs: context.timestampMs,
+      citation: `[${params.meetingTitle} @ ${timeFormatted}]`,
+      timestampMs: params.timestampMs,
       displayTime: timeFormatted,
-      speaker: context.speaker || "Unknown",
-      quote: context.quote,
+      speaker: params.speaker || "Unknown",
+      quote: params.quote,
     };
   },
 });
